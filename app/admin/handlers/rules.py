@@ -32,7 +32,8 @@ async def render_list(event, db: Database, page: int = 0):
     text = (
         "🎯 <b>Фильтры заявок</b>\n\n"
         "Фильтр следит за группами, куда бот пересылает заявки, и реагирует на "
-        "команду /start, любое сообщение или ключевые слова (город, товар, город + товар…).\n\n"
+        "ваши команды (/start, /price…), любое сообщение или ключевые слова (город, товар, город + товар…).\n"
+        "<i>Фильтры конкретной группы удобнее настраивать в разделе «🛰 Группы».</i>\n\n"
         f"Всего фильтров: <b>{total}</b>"
     )
     await show(event, text, kb(
@@ -71,11 +72,14 @@ async def render_rule(event, db: Database, rid: int):
                 lines.append(f"{prefix}{i}) {h(cut(', '.join(g), 120))}")
         else:
             lines.append("🔑 Условия: <i>не заданы</i>")
+    if r["trigger"] == "commands":
+        commands = json.loads(r["commands"])
+        lines.append(f"⌨️ Команды: {h(cut(', '.join(commands), 150)) if commands else '<i>не заданы</i>'}")
     if exclude:
         lines.append(f"🚫 Минус-слова: {h(cut(', '.join(exclude), 120))}")
     src_names = ", ".join(h(cut(titles.get(c, str(c)), 25)) for c in sources[:5])
     more = f" и ещё {len(sources) - 5}" if len(sources) > 5 else ""
-    lines.append(f"📍 Источники: {src_names + more if sources else '<i>не выбраны</i>'}")
+    lines.append(f"🛰 Группы: {src_names + more if sources else '<i>не выбраны</i>'}")
     lines += [
         "",
         "<b>Действия при совпадении:</b>",
@@ -91,13 +95,15 @@ async def render_rule(event, db: Database, rid: int):
     await show(event, "\n".join(lines), kb(
         [btn("🔴 Выключить" if r["enabled"] else "🟢 Включить", f"r:on:{rid}"),
          btn("🎯 Триггер", f"r:trg:{rid}")],
-        [btn("🔑 Ключевые слова", f"r:kw:{rid}"), btn("🚫 Минус-слова", f"r:ex:{rid}")],
-        [btn(f"📍 Источники ({len(sources)})", f"p:rs:{rid}:0"),
+        [btn("🔑 Ключевые слова", f"r:kw:{rid}"), btn("⌨️ Команды", f"r:cmd:{rid}")],
+        [btn("🚫 Минус-слова", f"r:ex:{rid}"), btn("🧪 Проверить текст", f"r:test:{rid}")],
+        [btn(f"🛰 Группы ({len(sources)})", f"p:rs:{rid}:0"),
          btn(f"🔔 Уведомления: {'да' if r['notify'] else 'нет'}", f"r:ntf:{rid}")],
         [btn("↪️ Пересылка", f"p:rf:{rid}:0"), btn("💬 Ответ в группе", f"tp:rr:{rid}:0")],
         [btn("✉️ ЛС автору", f"tp:rd:{rid}:0"), btn("⏱ Частота ЛС", f"r:cd:{rid}")],
-        [btn("🧪 Проверить текст", f"r:test:{rid}"), btn("✏️ Название", f"r:ren:{rid}")],
-        [btn("🗑 Удалить", f"r:del:{rid}"), btn("« К фильтрам", "r:list:0")],
+        [btn("✏️ Название", f"r:ren:{rid}"), btn("🗑 Удалить", f"r:del:{rid}")],
+        # фильтр одной группы — возвращаемся в эту группу
+        back(f"g:v:{sources[0]}", "« К группе") if len(sources) == 1 else back("r:list:0", "« К фильтрам"),
     ))
 
 
@@ -131,8 +137,16 @@ async def in_rule_name(message: Message, state: FSMContext, db: Database):
     await state.clear()
     await drop_prompt(message, data.get("prompt"))
     rid = await db.execute(
-        "INSERT INTO rules(name, created_at) VALUES(?, ?)", (message.text.strip()[:64], now())
+        "INSERT INTO rules(name, trigger, created_at) VALUES(?, ?, ?)",
+        (message.text.strip()[:64], data.get("trigger", "keywords"), now()),
     )
+    if group := data.get("group"):  # фильтр создан из экрана группы — сразу привязываем
+        await db.add_group(group)
+        await db.execute("INSERT OR IGNORE INTO rule_sources(rule_id, chat_id) VALUES(?, ?)", (rid, group))
+    if data.get("trigger") == "commands":
+        return await _ask_commands(message, state, rid)
+    if data.get("trigger") == "keywords" and group:
+        return await render_kw(message, db, rid)
     await render_rule(message, db, rid)
 
 
@@ -147,6 +161,8 @@ async def cb_toggle(call: CallbackQuery, db: Database, ub: UserBot):
             return await call.answer("Сначала выберите группы-источники 📍", show_alert=True)
         if r["trigger"] == "keywords" and not json.loads(r["keywords"]):
             return await call.answer("Добавьте ключевые слова 🔑 или смените триггер", show_alert=True)
+        if r["trigger"] == "commands" and not json.loads(r["commands"]):
+            return await call.answer("Добавьте команды ⌨️ или смените триггер", show_alert=True)
     await db.execute("UPDATE rules SET enabled = 1 - enabled WHERE id = ?", (rid,))
     await ub.monitor.reload()
     await render_rule(call, db, rid)
@@ -276,6 +292,47 @@ async def in_exclude(message: Message, state: FSMContext, db: Database, ub: User
     await db.execute("UPDATE rules SET exclude = ? WHERE id = ?", (json.dumps(terms, ensure_ascii=False), data["rid"]))
     await ub.monitor.reload()
     await render_rule(message, db, data["rid"])
+
+
+# --- свои команды ---
+
+CMD_HELP = (
+    "Перечислите команды через запятую, например:\n<code>/start, /price, /help, старт, меню</code>\n\n"
+    "• со слэшем — найдутся в любом месте текста (и <code>/start@bot</code>, и «Пользователь написал: /start»);\n"
+    "• без слэша — сообщение должно начинаться с этого слова.\n"
+    "Отправьте <code>-</code>, чтобы очистить список."
+)
+
+
+async def _ask_commands(event, state: FSMContext, rid: int, current: str = ""):
+    now_line = f"Сейчас: <code>{h(current)}</code>\n\n" if current else ""
+    prompt = await ask(event, f"⌨️ <b>Команды фильтра</b>\n\n{now_line}{CMD_HELP}", f"r:v:{rid}")
+    await state.set_state(Input.rule_cmd)
+    await state.update_data(prompt=prompt.message_id, rid=rid)
+
+
+@router.callback_query(F.data.startswith("r:cmd:"))
+async def cb_commands(call: CallbackQuery, state: FSMContext, db: Database):
+    rid = rid_of(call)
+    r = await db.rule(rid)
+    await _ask_commands(call, state, rid, ", ".join(json.loads(r["commands"])))
+    await call.answer()
+
+
+@router.message(Input.rule_cmd, F.text)
+async def in_commands(message: Message, state: FSMContext, db: Database, ub: UserBot):
+    data = await state.get_data()
+    commands = [] if message.text.strip() == "-" else split_terms(message.text)
+    await state.clear()
+    await drop_prompt(message, data.get("prompt"))
+    rid = data["rid"]
+    # заданы команды — логично сразу переключить триггер на них
+    await db.execute(
+        "UPDATE rules SET commands = ?, trigger = CASE WHEN ? THEN 'commands' ELSE trigger END WHERE id = ?",
+        (json.dumps(commands, ensure_ascii=False), int(bool(commands)), rid),
+    )
+    await ub.monitor.reload()
+    await render_rule(message, db, rid)
 
 
 # --- прочие поля ---

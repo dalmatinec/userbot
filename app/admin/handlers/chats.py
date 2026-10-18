@@ -3,7 +3,7 @@ from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
-from ...db import Database
+from ...db import Database, now
 from ...userbot.client import UserBot
 from ..states import Input
 from ..ui import CHAT_TYPES, PAGE, ask, back, btn, cut, drop_prompt, fmt_ts, h, kb, pager, show
@@ -13,7 +13,8 @@ router = Router(name="chats")
 
 # mode -> (заголовок, подсказка, только где можно писать, несколько, куда вернуться)
 MODES = {
-    "rs": ("📍 Источники заявок", "Отметьте группы/каналы, куда бот присылает заявки.", False, True, "r:v:{}"),
+    "rs": ("🛰 Группы фильтра", "Отметьте группы/каналы, где работает этот фильтр.", False, True, "r:v:{}"),
+    "ga": ("➕ Добавить группу", "Выберите группу или канал, куда бот присылает заявки. ✅ — уже отслеживается.", False, False, "g:list:0"),
     "rf": ("↪️ Куда пересылать заявки", "Выберите чат, куда пересылать подходящие заявки.", True, False, "r:v:{}"),
     "bt": ("🎯 Чаты для рассылки", "Отметьте группы и каналы, куда отправлять рассылку.", True, True, "b:v:{}"),
     "v": ("📋 Мои чаты", "Нажмите на чат, чтобы посмотреть подробности.", False, False, "c:menu"),
@@ -46,6 +47,8 @@ async def _selected(db: Database, mode: str, obj: int) -> set[int]:
         return {r["forward_to"]} if r and r["forward_to"] else set()
     if mode == "bt":
         return set(await db.broadcast_targets(obj))
+    if mode == "ga":
+        return {r["chat_id"] for r in await db.fetchall("SELECT chat_id FROM groups")}
     return set()
 
 
@@ -101,6 +104,13 @@ async def cb_pick(call: CallbackQuery, db: Database, ub: UserBot):
     if mode == "v":
         await render_chat(call, db, chat_id)
         return await call.answer()
+    if mode == "ga":
+        from . import groups
+
+        await db.add_group(chat_id)
+        await ub.monitor.reload()
+        await groups.render_group(call, db, chat_id)
+        return await call.answer("Группа добавлена")
     if mode == "rf":
         await db.execute("UPDATE rules SET forward_to = ? WHERE id = ?", (chat_id, obj))
         await ub.monitor.reload()
@@ -114,6 +124,8 @@ async def cb_pick(call: CallbackQuery, db: Database, ub: UserBot):
     else:
         await db.execute(f"INSERT INTO {table}({col}, chat_id) VALUES(?, ?)", (obj, chat_id))
     if mode == "rs":
+        if not exists:
+            await db.add_group(chat_id)
         await ub.monitor.reload()
     await render_picker(call, db, call.from_user.id, mode, obj, int(page))
     await call.answer("Убрано" if exists else "Добавлено")
@@ -134,6 +146,10 @@ async def cb_bulk(call: CallbackQuery, db: Database, ub: UserBot):
             [obj, *params],
         )
     if mode == "rs":
+        await db.execute(
+            "INSERT OR IGNORE INTO groups(chat_id, added_at) SELECT chat_id, ? FROM rule_sources WHERE rule_id = ?",
+            (now(), obj),
+        )
         await ub.monitor.reload()
     await render_picker(call, db, call.from_user.id, mode, obj, 0)
     await call.answer("Готово")

@@ -4,9 +4,9 @@ from app.userbot.broadcaster import in_quiet_hours
 from app.userbot.matcher import compile_rule, split_terms
 
 
-def rule(trigger="keywords", groups=(), exclude=()):
+def rule(trigger="keywords", groups=(), exclude=(), commands=()):
     return compile_rule({
-        "id": 1, "name": "t", "trigger": trigger,
+        "id": 1, "name": "t", "trigger": trigger, "commands": json.dumps(list(commands)),
         "keywords": json.dumps([list(g) for g in groups]), "exclude": json.dumps(list(exclude)),
         "notify": 1, "forward_to": None, "reply_tpl": None, "dm_tpl": None, "cooldown_h": 24,
     })
@@ -40,10 +40,21 @@ def test_regex_and_exclude():
     assert not r.match("айфон 15 б/у")
 
 
-def test_start_and_any():
-    assert rule("start").match("/start")
-    assert rule("start").match("Пользователь написал: /start ref123")
-    assert not rule("start").match("/restart")
+def test_custom_commands():
+    r = rule("commands", commands=["/start", "/price", "старт"])
+    assert r.match("/start")
+    assert r.match("/START@shop_bot")
+    assert r.match("Пользователь написал: /start ref123")
+    assert r.match("/price айфон")
+    assert r.match("Старт")
+    assert r.match("Новая заявка\nстарт")
+    assert not r.match("/restart")
+    assert not r.match("/starter")
+    assert not r.match("хочу на старт")
+    assert not rule("commands").match("/start")  # команды не заданы
+
+
+def test_any():
     assert rule("any").match("что угодно")
     assert not rule("any", exclude=["спам"]).match("это спам")
 

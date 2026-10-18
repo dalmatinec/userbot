@@ -11,7 +11,8 @@ PAGE = 8
 
 # Разделы админки. Какие из них стоят в главном меню, а какие в «Ещё» — настраивается.
 SECTIONS: dict[str, tuple[str, str]] = {
-    "rules": ("🎯 Фильтры заявок", "r:list:0"),
+    "groups": ("🛰 Группы", "g:list:0"),
+    "rules": ("🎯 Фильтры", "r:list:0"),
     "leads": ("📥 Заявки", "l:list:0"),
     "templates": ("📝 Шаблоны", "t:list:0"),
     "broadcasts": ("📣 Рассылки", "b:list:0"),
@@ -25,7 +26,7 @@ SECTIONS: dict[str, tuple[str, str]] = {
 
 TRIGGERS = {
     "keywords": "🔑 Ключевые слова",
-    "start": "🚀 Команда /start",
+    "commands": "⌨️ Свои команды",
     "any": "📨 Любое сообщение",
 }
 
@@ -129,6 +130,10 @@ def fmt_minutes(m: int) -> str:
     if m % 60 == 0:
         return f"каждые {m // 60} ч"
     return f"каждые {m} мин"
+
+
+def fmt_delay(sec: int) -> str:
+    return f"{sec} с" if sec else "сразу"
 
 
 def on_off(flag) -> str:

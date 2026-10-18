@@ -5,6 +5,10 @@
   * слово целиком — в кавычках: "спб" не найдёт «спбгу»;
   * регулярное выражение — с префиксом re: например  re:айфон\\s?1[3-6]
 Группы: ИЛИ внутри группы, И между группами («город» И «товар»).
+
+Команды задаются свои:
+  * со слэшем (/start, /price) — ищутся в любом месте текста, в т.ч. /start@bot и «написал: /start»;
+  * без слэша (старт, меню) — сообщение (или строка сообщения) должно начинаться с этого слова.
 """
 import json
 import re
@@ -39,6 +43,21 @@ def _compile_terms(terms: list[str]) -> re.Pattern | None:
     return re.compile("|".join(parts), re.IGNORECASE)
 
 
+def _compile_commands(commands: list[str]) -> re.Pattern | None:
+    parts = []
+    for raw in commands:
+        cmd = normalize(raw.strip())
+        if not cmd:
+            continue
+        if cmd.startswith("/"):
+            parts.append(rf"(?<![\w/]){re.escape(cmd)}(?:@\w+)?(?!{_WORD})")
+        else:
+            parts.append(rf"^\s*{re.escape(cmd)}(?!{_WORD})")
+    if not parts:
+        return None
+    return re.compile("|".join(parts), re.IGNORECASE | re.MULTILINE)
+
+
 def split_terms(text: str) -> list[str]:
     """Разбивает ввод админа на слова: через запятую, точку с запятой или с новой строки."""
     return [t.strip() for t in re.split(r"[,;\n]", text) if t.strip()]
@@ -51,6 +70,7 @@ class CompiledRule:
     trigger: str
     groups: list[re.Pattern] = field(default_factory=list)
     exclude: re.Pattern | None = None
+    commands: re.Pattern | None = None
     notify: bool = True
     forward_to: int | None = None
     reply_tpl: int | None = None
@@ -63,8 +83,8 @@ class CompiledRule:
             return False
         if self.trigger == "any":
             return True
-        if self.trigger == "start":
-            return bool(re.search(r"(?<![\w/])/start\b", norm))
+        if self.trigger == "commands":
+            return bool(self.commands and self.commands.search(norm))
         if not self.groups:
             return False
         return all(p.search(norm) for p in self.groups)
@@ -78,6 +98,7 @@ def compile_rule(row) -> CompiledRule:
         trigger=row["trigger"],
         groups=groups,
         exclude=_compile_terms(json.loads(row["exclude"])),
+        commands=_compile_commands(json.loads(row["commands"]) if "commands" in row.keys() else []),
         notify=bool(row["notify"]),
         forward_to=row["forward_to"],
         reply_tpl=row["reply_tpl"],

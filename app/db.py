@@ -42,8 +42,9 @@ CREATE TABLE IF NOT EXISTS rules (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     name       TEXT NOT NULL,
     enabled    INTEGER NOT NULL DEFAULT 0,
-    trigger    TEXT NOT NULL DEFAULT 'keywords', -- keywords | start | any
+    trigger    TEXT NOT NULL DEFAULT 'keywords', -- keywords | commands | any
     keywords   TEXT NOT NULL DEFAULT '[]',       -- [[слово, ...], [слово, ...]]: ИЛИ внутри группы, И между группами
+    commands   TEXT NOT NULL DEFAULT '[]',       -- свои команды: ["/start", "/price", "старт"]
     exclude    TEXT NOT NULL DEFAULT '[]',       -- минус-слова
     notify     INTEGER NOT NULL DEFAULT 1,
     forward_to INTEGER,
@@ -53,6 +54,16 @@ CREATE TABLE IF NOT EXISTS rules (
     created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS ix_rules_enabled ON rules(enabled);
+
+-- отслеживаемые группы со своими настройками
+CREATE TABLE IF NOT EXISTS groups (
+    chat_id   INTEGER PRIMARY KEY,
+    enabled   INTEGER NOT NULL DEFAULT 1,
+    delay_sec INTEGER NOT NULL DEFAULT 0,  -- пауза перед ответом / ЛС / пересылкой
+    notify    INTEGER NOT NULL DEFAULT 1,
+    added_at  INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_groups_enabled ON groups(enabled);
 
 CREATE TABLE IF NOT EXISTS rule_sources (
     rule_id INTEGER NOT NULL REFERENCES rules(id) ON DELETE CASCADE,
@@ -66,7 +77,7 @@ CREATE TABLE IF NOT EXISTS broadcasts (
     name         TEXT NOT NULL,
     enabled      INTEGER NOT NULL DEFAULT 0,
     interval_min INTEGER NOT NULL DEFAULT 60,   -- 0 = только ручной запуск
-    delay_sec    INTEGER NOT NULL DEFAULT 15,   -- пауза между чатами
+    delay_sec    INTEGER NOT NULL DEFAULT 20,   -- пауза между чатами
     next_run_at  INTEGER NOT NULL DEFAULT 0,
     last_run_at  INTEGER,
     last_ok      INTEGER NOT NULL DEFAULT 0,
@@ -132,7 +143,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "link_preview": False,
     "retention_days": 30,      # сколько дней хранить журналы
     "tz_offset": 3,            # часовой пояс для тихих часов и статистики (UTC+3 — Москва)
-    "main_menu": ["rules", "templates", "broadcasts", "chats", "leads", "pause"],
+    "main_menu": ["groups", "rules", "leads", "templates", "broadcasts", "chats", "pause"],
 }
 
 
@@ -163,6 +174,26 @@ class Database:
         async with self.conn.execute("SELECT key, value FROM settings") as cur:
             async for row in cur:
                 self.settings[row["key"]] = json.loads(row["value"])
+        await self._migrate()
+
+    async def _migrate(self) -> None:
+        """Обновление баз, созданных прошлыми версиями."""
+        cols = {r["name"] for r in await self.fetchall("PRAGMA table_info(rules)")}
+        if "commands" not in cols:
+            await self.conn.execute("ALTER TABLE rules ADD COLUMN commands TEXT NOT NULL DEFAULT '[]'")
+        await self.conn.execute(
+            "UPDATE rules SET trigger = 'commands', commands = '[\"/start\"]' WHERE trigger = 'start'"
+        )
+        await self.conn.execute(
+            "INSERT OR IGNORE INTO groups(chat_id, added_at) SELECT DISTINCT chat_id, ? FROM rule_sources",
+            (now(),),
+        )
+        await self.conn.commit()
+        menu = self.settings.get("main_menu")
+        if not self.get("migr_groups"):
+            if "groups" not in menu:
+                await self.put("main_menu", ["groups", *menu])
+            await self.put("migr_groups", True)
 
     async def close(self) -> None:
         if self.conn:
@@ -245,6 +276,12 @@ class Database:
     async def rule_sources(self, rid: int) -> list[int]:
         rows = await self.fetchall("SELECT chat_id FROM rule_sources WHERE rule_id = ?", (rid,))
         return [r["chat_id"] for r in rows]
+
+    async def group(self, chat_id: int) -> aiosqlite.Row | None:
+        return await self.fetchone("SELECT * FROM groups WHERE chat_id = ?", (chat_id,))
+
+    async def add_group(self, chat_id: int) -> None:
+        await self.execute("INSERT OR IGNORE INTO groups(chat_id, added_at) VALUES(?, ?)", (chat_id, now()))
 
     # --- рассылки ---
 

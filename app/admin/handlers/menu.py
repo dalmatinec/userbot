@@ -24,6 +24,7 @@ async def main_text(db: Database, ub: UserBot) -> str:
     else:
         account = "🔴 не подключён"
     mode = "⏸ на паузе" if db.get("paused") else "▶️ работает"
+    groups = await db.scalar("SELECT COUNT(*) FROM groups WHERE enabled = 1")
     rules = await db.scalar("SELECT COUNT(*) FROM rules WHERE enabled = 1")
     bcs = await db.scalar("SELECT COUNT(*) FROM broadcasts WHERE enabled = 1")
     leads_today = await db.scalar("SELECT COUNT(*) FROM leads WHERE created_at >= ?", (day_start(db),))
@@ -31,7 +32,7 @@ async def main_text(db: Database, ub: UserBot) -> str:
         "🤖 <b>Панель юзербота</b>\n\n"
         f"👤 Аккаунт: {account}\n"
         f"⚙️ Режим: {mode}\n"
-        f"🎯 Активных фильтров: <b>{rules}</b>   📣 Рассылок: <b>{bcs}</b>\n"
+        f"🛰 Групп: <b>{groups}</b>   🎯 Фильтров: <b>{rules}</b>   📣 Рассылок: <b>{bcs}</b>\n"
         f"📥 Заявок сегодня: <b>{leads_today}</b>"
     )
 

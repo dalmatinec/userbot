@@ -58,6 +58,7 @@ class Monitor:
         self.ub = ub
         self.db = ub.db
         self.by_chat: dict[int, list[CompiledRule]] = {}
+        self.group_cfg: dict[int, tuple[int, bool]] = {}  # chat_id -> (задержка, уведомлять)
         self.dm_queue: asyncio.Queue[DmTask] = asyncio.Queue()
         self.dm_blocked_until = 0
         self._handler_added = False
@@ -71,10 +72,13 @@ class Monitor:
         self.ub.spawn(self._dm_worker())
 
     async def reload(self) -> None:
-        """Перечитывает включённые правила в память. Вызывается после любых правок в админке."""
+        """Перечитывает включённые группы и фильтры в память. Вызывается после любых правок в админке."""
+        groups = await self.db.fetchall("SELECT chat_id, delay_sec, notify FROM groups WHERE enabled = 1")
         rows = await self.db.fetchall(
             "SELECT r.*, s.chat_id AS src FROM rules r "
-            "JOIN rule_sources s ON s.rule_id = r.id WHERE r.enabled = 1"
+            "JOIN rule_sources s ON s.rule_id = r.id "
+            "JOIN groups g ON g.chat_id = s.chat_id AND g.enabled = 1 "
+            "WHERE r.enabled = 1"
         )
         compiled: dict[int, CompiledRule] = {}
         by_chat: dict[int, list[CompiledRule]] = {}
@@ -84,6 +88,7 @@ class Monitor:
                 rule = compiled[row["id"]] = compile_rule(row)
             by_chat.setdefault(row["src"], []).append(rule)
         self.by_chat = by_chat
+        self.group_cfg = {g["chat_id"]: (g["delay_sec"], bool(g["notify"])) for g in groups}
         log.info("Правил активно: %s, групп-источников: %s", len(compiled), len(by_chat))
 
     async def _on_message(self, event: events.NewMessage.Event) -> None:
@@ -149,7 +154,9 @@ class Monitor:
 
     async def _process(self, msg, rules: list[CompiledRule]) -> None:
         author = await self.extract_author(msg)
-        dm_queued = False
+        delay, group_notify = self.group_cfg.get(msg.chat_id, (0, True))
+
+        fresh: list[CompiledRule] = []
         for rule in rules:
             cur = await self.db.conn.execute(
                 "INSERT OR IGNORE INTO leads(rule_id, chat_id, msg_id, author_id, author_name, "
@@ -159,26 +166,35 @@ class Monitor:
             )
             await self.db.conn.commit()
             if cur.rowcount == 0:
-                continue  # эту заявку по этому правилу уже обработали
-            lead_id = cur.lastrowid
-
-            if rule.notify and self.db.get("notify_leads") and self.ub.on_lead:
+                continue  # эту заявку по этому фильтру уже обработали
+            fresh.append(rule)
+            if rule.notify and group_notify and self.db.get("notify_leads") and self.ub.on_lead:
                 try:
-                    await self.ub.on_lead(lead_id)
+                    await self.ub.on_lead(cur.lastrowid)
                 except Exception:
-                    log.exception("Не удалось уведомить о заявке #%s", lead_id)
+                    log.exception("Не удалось уведомить о заявке #%s", cur.lastrowid)
 
+        acting = [r for r in fresh if r.forward_to or r.reply_tpl or r.dm_tpl]
+        if not acting:
+            return
+        if delay > 0:
+            await asyncio.sleep(delay)  # своя задержка группы: реакция не мгновенная
+        if self.db.get("paused"):
+            return
+
+        dm_queued = False
+        for rule in acting:
             if rule.forward_to:
                 try:
                     await self.ub.client.forward_messages(rule.forward_to, msg)
                 except errors.RPCError as e:
-                    await self.ub.event(f"⚠️ Правило «{escape(rule.name)}»: не удалось переслать заявку — {e.__class__.__name__}")
+                    await self.ub.event(f"⚠️ Фильтр «{escape(rule.name)}»: не удалось переслать заявку — {e.__class__.__name__}")
 
             if rule.reply_tpl and (tpl := await self.db.template(rule.reply_tpl)):
                 try:
                     await self.ub.send_template(msg.chat_id, tpl, reply_to=msg.id)
                 except errors.RPCError as e:
-                    await self.ub.event(f"⚠️ Правило «{escape(rule.name)}»: не удалось ответить в группе — {e.__class__.__name__}")
+                    await self.ub.event(f"⚠️ Фильтр «{escape(rule.name)}»: не удалось ответить в группе — {e.__class__.__name__}")
 
             if rule.dm_tpl and author.reachable and not dm_queued:
                 dm_queued = True

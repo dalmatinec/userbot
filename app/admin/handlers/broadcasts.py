@@ -11,7 +11,7 @@ router = Router(name="broadcasts")
 
 INTERVALS = [(0, "Разово"), (30, "30 мин"), (60, "1 ч"), (120, "2 ч"), (180, "3 ч"),
              (360, "6 ч"), (720, "12 ч"), (1440, "24 ч")]
-DELAYS = [5, 10, 15, 30, 60, 120, 300]
+DELAYS = [10, 20, 30, 40, 50, 60]
 
 
 def bid_of(call: CallbackQuery) -> int:
@@ -207,7 +207,7 @@ async def cb_delay(call: CallbackQuery, db: Database):
         "Чем больше пауза, тем меньше риск ограничений от Telegram. "
         "Пауза немного случайно меняется (±20%), чтобы отправка выглядела естественно.\n\n"
         f"Сейчас: {b['delay_sec']} с"
-    ), kb(*grid(buttons, 4), [btn("✍️ Своё значение (сек)", f"b:dli:{bid}")], back(f"b:v:{bid}")))
+    ), kb(*grid(buttons, 3), [btn("✍️ Своё значение (сек)", f"b:dli:{bid}")], back(f"b:v:{bid}")))
     await call.answer()
 
 

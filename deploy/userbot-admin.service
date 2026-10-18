@@ -1,0 +1,19 @@
+[Unit]
+Description=Userbot with admin bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# поменяйте пользователя и путь под свой сервер
+User=userbot
+WorkingDirectory=/opt/userbot
+ExecStart=/opt/userbot/.venv/bin/python main.py
+Restart=always
+RestartSec=10
+Environment=PYTHONUNBUFFERED=1
+# защита от бесконтрольного роста памяти
+MemoryMax=512M
+
+[Install]
+WantedBy=multi-user.target

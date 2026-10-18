@@ -3,3 +3,4 @@ cryptg>=0.4
 aiogram>=3.13,<4
 aiosqlite>=0.20
 python-dotenv>=1.0
+qrcode>=7.4

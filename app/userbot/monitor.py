@@ -215,6 +215,8 @@ class Monitor:
 
     async def _on_join(self, event) -> None:
         rules = [r for r in self.by_chat.get(event.chat_id, []) if r.trigger == "joined"]
+        log.info("Вступление: чат %s, пользователь %s, приветствий настроено: %s",
+                 event.chat_id, event.user_id, len(rules))
         if not rules or self.db.get("paused") or not event.user_id:
             return
         me = await self.ub.client.get_me()

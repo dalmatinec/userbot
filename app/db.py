@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS rules (
     reply_tpl  INTEGER REFERENCES templates(id) ON DELETE SET NULL,
     dm_tpl     INTEGER REFERENCES templates(id) ON DELETE SET NULL,
     cooldown_h INTEGER NOT NULL DEFAULT 24,
+    delay_sec  INTEGER,                          -- NULL = как у группы
     created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS ix_rules_enabled ON rules(enabled);
@@ -181,6 +182,8 @@ class Database:
         cols = {r["name"] for r in await self.fetchall("PRAGMA table_info(rules)")}
         if "commands" not in cols:
             await self.conn.execute("ALTER TABLE rules ADD COLUMN commands TEXT NOT NULL DEFAULT '[]'")
+        if "delay_sec" not in cols:
+            await self.conn.execute("ALTER TABLE rules ADD COLUMN delay_sec INTEGER")
         await self.conn.execute(
             "UPDATE rules SET trigger = 'commands', commands = '[\"/start\"]' WHERE trigger = 'start'"
         )

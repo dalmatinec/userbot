@@ -8,7 +8,7 @@ from ...db import Database, now
 from ...userbot.client import UserBot
 from ...userbot.matcher import compile_rule, split_terms
 from ..states import Input
-from ..ui import PAGE, TRIGGERS, ask, back, btn, cut, day_start, drop_prompt, h, kb, on_off, pager, show
+from ..ui import PAGE, TRIGGERS, ask, back, btn, cut, day_start, drop_prompt, fmt_delay, grid, h, kb, on_off, pager, show
 
 router = Router(name="rules")
 
@@ -75,6 +75,9 @@ async def render_rule(event, db: Database, rid: int):
     if r["trigger"] == "commands":
         commands = json.loads(r["commands"])
         lines.append(f"⌨️ Команды: {h(cut(', '.join(commands), 150)) if commands else '<i>не заданы</i>'}")
+    if r["trigger"] == "joined":
+        lines.append("👋 Срабатывает, когда новый участник вступает в группу")
+    lines.append(f"⏳ Задержка: {'как у группы' if r['delay_sec'] is None else fmt_delay(r['delay_sec'])}")
     if exclude:
         lines.append(f"🚫 Минус-слова: {h(cut(', '.join(exclude), 120))}")
     src_names = ", ".join(h(cut(titles.get(c, str(c)), 25)) for c in sources[:5])
@@ -101,7 +104,8 @@ async def render_rule(event, db: Database, rid: int):
          btn(f"🔔 Уведомления: {'да' if r['notify'] else 'нет'}", f"r:ntf:{rid}")],
         [btn("↪️ Пересылка", f"p:rf:{rid}:0"), btn("💬 Ответ в группе", f"tp:rr:{rid}:0")],
         [btn("✉️ ЛС автору", f"tp:rd:{rid}:0"), btn("⏱ Частота ЛС", f"r:cd:{rid}")],
-        [btn("✏️ Название", f"r:ren:{rid}"), btn("🗑 Удалить", f"r:del:{rid}")],
+        [btn("⏳ Задержка", f"r:dl:{rid}"), btn("✏️ Название", f"r:ren:{rid}")],
+        [btn("🗑 Удалить", f"r:del:{rid}")],
         # фильтр одной группы — возвращаемся в эту группу
         back(f"g:v:{sources[0]}", "« К группе") if len(sources) == 1 else back("r:list:0", "« К фильтрам"),
     ))
@@ -188,6 +192,36 @@ async def cb_notify(call: CallbackQuery, db: Database, ub: UserBot):
     await ub.monitor.reload()
     await render_rule(call, db, rid)
     await call.answer()
+
+
+RULE_DELAYS = [-1, 0, 5, 10, 20, 30, 60]
+
+
+@router.callback_query(F.data.startswith("r:dl:"))
+async def cb_rule_delay(call: CallbackQuery, db: Database):
+    rid = rid_of(call)
+    r = await db.rule(rid)
+    current = -1 if r["delay_sec"] is None else r["delay_sec"]
+    buttons = [
+        btn(("✅ " if current == s else "") + ("как у группы" if s < 0 else fmt_delay(s)), f"r:setdl:{rid}:{s}")
+        for s in RULE_DELAYS
+    ]
+    await show(call, (
+        f"⏳ <b>Задержка — {h(r['name'])}</b>\n\n"
+        "Пауза после совпадения перед ответом, ЛС и пересылкой. "
+        "«Как у группы» — берётся задержка группы."
+    ), kb(*grid(buttons, 2), back(f"r:v:{rid}")))
+    await call.answer()
+
+
+@router.callback_query(F.data.startswith("r:setdl:"))
+async def cb_set_rule_delay(call: CallbackQuery, db: Database, ub: UserBot):
+    _, _, rid, sec = call.data.split(":")
+    value = None if int(sec) < 0 else int(sec)
+    await db.execute("UPDATE rules SET delay_sec = ? WHERE id = ?", (value, int(rid)))
+    await ub.monitor.reload()
+    await render_rule(call, db, int(rid))
+    await call.answer("Сохранено")
 
 
 # --- ключевые слова ---

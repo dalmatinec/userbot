@@ -28,6 +28,7 @@ TRIGGERS = {
     "keywords": "🔑 Ключевые слова",
     "commands": "⌨️ Свои команды",
     "any": "📨 Любое сообщение",
+    "joined": "👋 Вступление в группу",
 }
 
 CHAT_TYPES = {"group": "👥 группа", "supergroup": "👥 супергруппа", "channel": "📢 канал"}
@@ -83,7 +84,7 @@ async def show(event: Message | CallbackQuery, text: str, markup: InlineKeyboard
 
 async def ask(event: Message | CallbackQuery, text: str, back_to: str) -> Message:
     """Экран ввода: подсказка + кнопка отмены (любая кнопка отменяет ввод)."""
-    return await show(event, text, kb(back("✖️ Отмена", back_to)))
+    return await show(event, text, kb(back(back_to, "✖️ Отмена")))
 
 
 async def drop_prompt(message: Message, prompt_id: int | None) -> None:

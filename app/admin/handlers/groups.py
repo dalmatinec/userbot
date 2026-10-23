@@ -83,7 +83,7 @@ async def render_group(event, db: Database, chat_id: int):
          btn(f"🔔 Уведомления: {'да' if g['notify'] else 'нет'}", f"g:ntf:{chat_id}")],
         *rule_rows,
         [btn("➕ Команды", f"g:nr:{chat_id}:commands"), btn("➕ Ключевые слова", f"g:nr:{chat_id}:keywords")],
-        [btn("➕ Любое сообщение", f"g:nr:{chat_id}:any")],
+        [btn("➕ Любое сообщение", f"g:nr:{chat_id}:any"), btn("➕ Вступление", f"g:nr:{chat_id}:joined")],
         [btn("🗑 Убрать группу", f"g:del:{chat_id}"), btn("« К группам", "g:list:0")],
     ))
 
@@ -160,7 +160,8 @@ async def cb_rule_toggle(call: CallbackQuery, db: Database, ub: UserBot):
 @router.callback_query(F.data.startswith("g:nr:"))
 async def cb_new_rule(call: CallbackQuery, state: FSMContext):
     _, _, chat_id, trigger = call.data.split(":")
-    examples = {"commands": "Команда /start", "keywords": "Москва + iPhone", "any": "Все сообщения"}
+    examples = {"commands": "Команда /start", "keywords": "Москва + iPhone", "any": "Все сообщения",
+                "joined": "Приветствие новичкам"}
     prompt = await ask(call, f"➕ <b>Новый фильтр: {TRIGGERS[trigger]}</b>\n\n"
                              f"Напишите название, например: <i>{examples[trigger]}</i>", f"g:v:{chat_id}")
     await state.set_state(Input.rule_name)

@@ -100,7 +100,7 @@ async def cb_new(call: CallbackQuery, state: FSMContext):
 async def in_name(message: Message, state: FSMContext):
     data = await state.get_data()
     await drop_prompt(message, data.get("prompt"))
-    prompt = await message.answer(f"Шаг 2/2. {CONTENT_HINT}", reply_markup=kb(back("✖️ Отмена", "t:list:0")))
+    prompt = await message.answer(f"Шаг 2/2. {CONTENT_HINT}", reply_markup=kb(back("t:list:0", "✖️ Отмена")))
     await state.set_state(Input.tpl_content)
     await state.update_data(prompt=prompt.message_id, name=message.text.strip()[:64], tid=None)
 

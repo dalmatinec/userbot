@@ -76,11 +76,14 @@ class CompiledRule:
     reply_tpl: int | None = None
     dm_tpl: int | None = None
     cooldown_h: int = 24
+    delay_sec: int | None = None
 
     def match(self, text: str) -> bool:
         norm = normalize(text or "")
         if self.exclude and self.exclude.search(norm):
             return False
+        if self.trigger == "joined":
+            return False  # срабатывает на вступление, а не на текст
         if self.trigger == "any":
             return True
         if self.trigger == "commands":
@@ -104,4 +107,5 @@ def compile_rule(row) -> CompiledRule:
         reply_tpl=row["reply_tpl"],
         dm_tpl=row["dm_tpl"],
         cooldown_h=row["cooldown_h"],
+        delay_sec=row["delay_sec"],
     )

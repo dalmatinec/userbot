@@ -62,14 +62,21 @@ class Monitor:
         self.dm_queue: asyncio.Queue[DmTask] = asyncio.Queue()
         self.dm_blocked_until = 0
         self._handler_added = False
+        self.join_queue: asyncio.Queue = asyncio.Queue()
+        self._join_started = False
 
     async def setup(self) -> None:
         """Вызывается при каждом (пере)подключении: обработчик вешается один раз, воркер ЛС — заново."""
         await self.reload()
         if not self._handler_added:
             self.ub.client.add_event_handler(self._on_message, events.NewMessage(incoming=True))
+            self.ub.client.add_event_handler(
+                self._on_join, events.ChatAction(func=lambda e: bool(e.user_joined or e.user_added)))
             self._handler_added = True
         self.ub.spawn(self._dm_worker())
+        if not self._join_started:
+            self._join_started = True
+            self.ub.spawn(self._join_worker())
 
     async def reload(self) -> None:
         """Перечитывает включённые группы и фильтры в память. Вызывается после любых правок в админке."""
@@ -177,30 +184,77 @@ class Monitor:
         acting = [r for r in fresh if r.forward_to or r.reply_tpl or r.dm_tpl]
         if not acting:
             return
-        if delay > 0:
-            await asyncio.sleep(delay)  # своя задержка группы: реакция не мгновенная
-        if self.db.get("paused"):
-            return
-
         dm_queued = False
         for rule in acting:
-            if rule.forward_to:
-                try:
-                    await self.ub.client.forward_messages(rule.forward_to, msg)
-                except errors.RPCError as e:
-                    await self.ub.event(f"⚠️ Фильтр «{escape(rule.name)}»: не удалось переслать заявку — {e.__class__.__name__}")
+            wait = delay if rule.delay_sec is None else rule.delay_sec  # задержка фильтра важнее группы
+            want_dm = bool(rule.dm_tpl) and author.reachable and not dm_queued
+            dm_queued = dm_queued or want_dm
+            self.ub.spawn(self._act(msg, rule, author, wait, want_dm))
 
-            if rule.reply_tpl and (tpl := await self.db.template(rule.reply_tpl)):
-                try:
-                    await self.ub.send_template(msg.chat_id, tpl, reply_to=msg.id)
-                except errors.RPCError as e:
-                    await self.ub.event(f"⚠️ Фильтр «{escape(rule.name)}»: не удалось ответить в группе — {e.__class__.__name__}")
+    async def _act(self, msg, rule: CompiledRule, author: Author, wait: int, want_dm: bool) -> None:
+        if wait > 0:
+            await asyncio.sleep(wait)  # пауза: реакция не мгновенная
+        if self.db.get("paused"):
+            return
+        if rule.forward_to:
+            try:
+                await self.ub.client.forward_messages(rule.forward_to, msg)
+            except errors.RPCError as e:
+                await self.ub.event(f"⚠️ Фильтр «{escape(rule.name)}»: не удалось переслать заявку — {e.__class__.__name__}")
+        if rule.reply_tpl and (tpl := await self.db.template(rule.reply_tpl)):
+            try:
+                await self.ub.send_template(msg.chat_id, tpl, reply_to=msg.id)
+            except errors.RPCError as e:
+                await self.ub.event(f"⚠️ Фильтр «{escape(rule.name)}»: не удалось ответить в группе — {e.__class__.__name__}")
+        if want_dm:
+            self.dm_queue.put_nowait(DmTask(
+                author.id, author.username, rule.dm_tpl, rule.id, rule.cooldown_h, title=author.title,
+            ))
 
-            if rule.dm_tpl and author.reachable and not dm_queued:
-                dm_queued = True
-                self.dm_queue.put_nowait(DmTask(
-                    author.id, author.username, rule.dm_tpl, rule.id, rule.cooldown_h, title=author.title,
-                ))
+    # --- вступление в группу ---
+
+    async def _on_join(self, event) -> None:
+        rules = [r for r in self.by_chat.get(event.chat_id, []) if r.trigger == "joined"]
+        if not rules or self.db.get("paused") or not event.user_id:
+            return
+        me = await self.ub.client.get_me()
+        if event.user_id == me.id:  # вступил сам аккаунт — не реагируем
+            return
+        try:
+            user = await event.get_user()
+        except errors.RPCError:
+            user = None
+        if user is not None and getattr(user, "bot", False):
+            return  # ботов не приветствуем
+        author = Author(id=event.user_id)
+        if user is not None:
+            author.name = utils.get_display_name(user) or None
+            author.username = getattr(user, "username", None)
+        for rule in rules:
+            self.join_queue.put_nowait((event.chat_id, rule, author))
+
+    async def _join_worker(self) -> None:
+        """Обрабатывает вступления по одному: при массовом входе приветствия идут друг за другом, а не пачкой."""
+        while True:
+            chat_id, rule, author = await self.join_queue.get()
+            try:
+                group_delay = self.group_cfg.get(chat_id, (0, True))[0]
+                wait = group_delay if rule.delay_sec is None else rule.delay_sec
+                if wait > 0:
+                    await asyncio.sleep(wait)
+                if self.db.get("paused"):
+                    continue
+                if rule.reply_tpl and (tpl := await self.db.template(rule.reply_tpl)):
+                    try:
+                        await self.ub.send_template(chat_id, tpl)
+                    except errors.RPCError as e:
+                        await self.ub.event(f"⚠️ Фильтр «{escape(rule.name)}»: не удалось поприветствовать — {e.__class__.__name__}")
+                if rule.dm_tpl and author.reachable:
+                    self.dm_queue.put_nowait(DmTask(
+                        author.id, author.username, rule.dm_tpl, rule.id, rule.cooldown_h, title=author.title,
+                    ))
+            except Exception:
+                log.exception("Ошибка обработки вступления")
 
     # --- личные сообщения авторам ---
 

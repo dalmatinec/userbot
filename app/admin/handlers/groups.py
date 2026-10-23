@@ -13,7 +13,7 @@ from ...db import Database, now
 from ...userbot.client import UserBot
 from ...userbot.matcher import split_terms
 from ..states import Input
-from ..ui import CHAT_TYPES, PAGE, ask, back, btn, cut, day_start, drop_prompt, fmt_delay, grid, h, kb, on_off, pager, show
+from ..ui import CHAT_TYPES, PAGE, ask, back, btn, cut, drop_prompt, fmt_delay, grid, h, kb, on_off, pager, show
 
 router = Router(name="groups")
 
@@ -87,14 +87,13 @@ async def render_group(event, db: Database, chat_id: int):
     kw_tpl = await db.template(kw["reply_tpl"])
     dm_tpl = await db.template(kw["dm_tpl"])
     jn_tpl = await db.template(jn["reply_tpl"])
-    today = await db.scalar(
-        "SELECT COUNT(*) FROM leads WHERE chat_id = ? AND created_at >= ?", (chat_id, day_start(db))
-    )
     title = chat["title"] if chat else str(chat_id)
+    bot_line = (f"🤖 Бот заявок: <code>{g['bot_id']}</code>" if g["bot_id"]
+                else "🤖 Бот заявок: <i>не задан — реагирую на всех</i>")
     lines = [
         f"🛰 <b>{h(title)}</b>   {on_off(g['enabled'])} {'отслеживается' if g['enabled'] else 'выключена'}",
         f"{CHAT_TYPES.get(chat['type'], '') if chat else ''} · <code>{chat_id}</code>",
-        f"📥 Заявок сегодня: <b>{today}</b>",
+        bot_line,
         "",
         f"🔑 Ключевые слова: {h(', '.join(words)) if words else '<i>не заданы</i>'}",
         f"⌨️ Команды: {h(', '.join(commands)) if commands else '<i>не заданы</i>'}",
@@ -113,6 +112,7 @@ async def render_group(event, db: Database, chat_id: int):
          btn("🎉 Шаблон приветствия", f"tp:rr:{jn['id']}:0")],
         [btn("💬 Ответ на заявки", f"tp:rr:{kw['id']}:0"), btn("✉️ ЛС автору", f"tp:rd:{kw['id']}:0")],
         [btn("⏱ Частота ЛС", f"r:cd:{kw['id']}"), btn(f"🔔 Уведомления: {'да' if g['notify'] else 'нет'}", f"g:ntf:{chat_id}")],
+        [btn("🤖 Бот заявок", f"g:bot:{chat_id}"), btn("🚫 Без бота", f"g:botx:{chat_id}")],
         [btn("🗑 Убрать группу", f"g:del:{chat_id}"), btn("« К группам", "g:list:0")],
     ))
 
@@ -248,3 +248,54 @@ async def cb_delete_ok(call: CallbackQuery, db: Database, ub: UserBot):
     await ub.monitor.reload()
     await render_list(call, db)
     await call.answer("Группа убрана")
+
+
+# --- бот заявок группы ---
+
+@router.callback_query(F.data.startswith("g:bot:"))
+async def cb_bot(call: CallbackQuery, state: FSMContext):
+    chat_id = chat_of(call)
+    prompt = await ask(call, (
+        "🤖 <b>Бот заявок группы</b>\n\n"
+        "Перешлите сюда любое сообщение от бота площадки или напишите его @username или ID.\n"
+        "Тогда юзербот будет реагировать только на сообщения этого бота."
+    ), f"g:v:{chat_id}")
+    await state.set_state(Input.grp_bot)
+    await state.update_data(prompt=prompt.message_id, group=chat_id)
+    await call.answer()
+
+
+@router.callback_query(F.data.startswith("g:botx:"))
+async def cb_bot_clear(call: CallbackQuery, db: Database, ub: UserBot):
+    chat_id = chat_of(call)
+    await db.execute("UPDATE groups SET bot_id = NULL WHERE chat_id = ?", (chat_id,))
+    await ub.monitor.reload()
+    await render_group(call, db, chat_id)
+    await call.answer("Бот снят: реагирую на всех")
+
+
+@router.message(Input.grp_bot)
+async def in_bot(message: Message, state: FSMContext, db: Database, ub: UserBot):
+    data = await state.get_data()
+    await state.clear()
+    await drop_prompt(message, data.get("prompt"))
+    chat_id = data["group"]
+    bot_id = None
+    fwd = getattr(message, "forward_from", None)
+    if fwd is not None:
+        bot_id = fwd.id
+    elif message.text:
+        raw = message.text.strip()
+        if raw.lstrip("-").isdigit():
+            bot_id = int(raw)
+        else:
+            try:
+                bot_id = (await ub.client.get_entity(raw.lstrip("@"))).id
+            except Exception:  # неверный username или нет доступа к аккаунту
+                bot_id = None
+    if bot_id is None:
+        await message.answer("Не получилось определить бота. Перешлите его сообщение или напишите @username.")
+    else:
+        await db.execute("UPDATE groups SET bot_id = ? WHERE chat_id = ?", (bot_id, chat_id))
+        await ub.monitor.reload()
+    await render_group(message, db, chat_id)

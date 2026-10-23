@@ -62,7 +62,8 @@ CREATE TABLE IF NOT EXISTS groups (
     enabled   INTEGER NOT NULL DEFAULT 1,
     delay_sec INTEGER NOT NULL DEFAULT 0,  -- пауза перед ответом / ЛС / пересылкой
     notify    INTEGER NOT NULL DEFAULT 1,
-    added_at  INTEGER NOT NULL
+    added_at  INTEGER NOT NULL,
+    bot_id    INTEGER                       -- бот заявок группы; NULL = реагировать на всех
 );
 CREATE INDEX IF NOT EXISTS ix_groups_enabled ON groups(enabled);
 
@@ -184,6 +185,9 @@ class Database:
             await self.conn.execute("ALTER TABLE rules ADD COLUMN commands TEXT NOT NULL DEFAULT '[]'")
         if "delay_sec" not in cols:
             await self.conn.execute("ALTER TABLE rules ADD COLUMN delay_sec INTEGER")
+        gcols = {r["name"] for r in await self.fetchall("PRAGMA table_info(groups)")}
+        if "bot_id" not in gcols:
+            await self.conn.execute("ALTER TABLE groups ADD COLUMN bot_id INTEGER")
         await self.conn.execute(
             "UPDATE rules SET trigger = 'commands', commands = '[\"/start\"]' WHERE trigger = 'start'"
         )

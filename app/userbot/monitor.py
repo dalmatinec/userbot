@@ -80,7 +80,7 @@ class Monitor:
 
     async def reload(self) -> None:
         """Перечитывает включённые группы и фильтры в память. Вызывается после любых правок в админке."""
-        groups = await self.db.fetchall("SELECT chat_id, delay_sec, notify FROM groups WHERE enabled = 1")
+        groups = await self.db.fetchall("SELECT chat_id, delay_sec, notify, bot_id FROM groups WHERE enabled = 1")
         rows = await self.db.fetchall(
             "SELECT r.*, s.chat_id AS src FROM rules r "
             "JOIN rule_sources s ON s.rule_id = r.id "
@@ -95,12 +95,17 @@ class Monitor:
                 rule = compiled[row["id"]] = compile_rule(row)
             by_chat.setdefault(row["src"], []).append(rule)
         self.by_chat = by_chat
-        self.group_cfg = {g["chat_id"]: (g["delay_sec"], bool(g["notify"])) for g in groups}
+        self.group_cfg = {g["chat_id"]: (g["delay_sec"], bool(g["notify"]), g["bot_id"]) for g in groups}
         log.info("Правил активно: %s, групп-источников: %s", len(compiled), len(by_chat))
 
     async def _on_message(self, event: events.NewMessage.Event) -> None:
+        if event.out:  # свои сообщения аккаунта не трогаем
+            return
         rules = self.by_chat.get(event.chat_id)
         if not rules or self.db.get("paused"):
+            return
+        bot_id = self.group_cfg.get(event.chat_id, (0, True, None))[2]
+        if bot_id and event.sender_id != bot_id:  # в группе задан бот заявок — только его сообщения
             return
         text = event.message.message or ""
         matched = [r for r in rules if r.match(text)]
@@ -161,7 +166,7 @@ class Monitor:
 
     async def _process(self, msg, rules: list[CompiledRule]) -> None:
         author = await self.extract_author(msg)
-        delay, group_notify = self.group_cfg.get(msg.chat_id, (0, True))
+        delay, group_notify, _ = self.group_cfg.get(msg.chat_id, (0, True, None))
 
         fresh: list[CompiledRule] = []
         for rule in rules:

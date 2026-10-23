@@ -21,6 +21,18 @@ def normalize(text: str) -> str:
     return text.lower().replace("ё", "е")
 
 
+_AMOUNT_RE = re.compile(r"^(\d+)\s*[кk]$")
+
+
+def _amount(term: str) -> str | None:
+    """«20к» — это 20 тысяч: ищем 20к, 20 к, 20 тыс, 20 000 и 20000."""
+    m = _AMOUNT_RE.match(normalize(term))
+    if not m:
+        return None
+    n = m.group(1)
+    return rf"(?<!\w){n}(?:\s?(?:к|k|тыс\w*)|\s?000)(?!\w)"
+
+
 def _compile_terms(terms: list[str]) -> re.Pattern | None:
     parts = []
     for raw in terms:
@@ -29,6 +41,9 @@ def _compile_terms(terms: list[str]) -> re.Pattern | None:
             continue
         if term.startswith("re:"):
             parts.append(f"(?:{term[3:]})")
+            continue
+        if amount := _amount(term):
+            parts.append(amount)
             continue
         exact = len(term) > 2 and (
             (term[0] == term[-1] and term[0] in "\"'") or (term[0] == "«" and term[-1] == "»")

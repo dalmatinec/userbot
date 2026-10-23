@@ -11,6 +11,7 @@ class Input(StatesGroup):
     rule_cmd = State()
     grp_kw = State()
     grp_cmd = State()
+    grp_bot = State()
 
     tpl_name = State()
     tpl_content = State()

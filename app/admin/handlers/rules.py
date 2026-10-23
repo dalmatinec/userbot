@@ -51,7 +51,7 @@ async def render_rule(event, db: Database, rid: int):
     groups = json.loads(r["keywords"])
     exclude = json.loads(r["exclude"])
     sources = await db.rule_sources(rid)
-    titles = await db.chat_titles(sources + ([r["forward_to"]] if r["forward_to"] else []))
+    titles = await db.chat_titles(sources)
     reply_tpl = await db.template(r["reply_tpl"])
     dm_tpl = await db.template(r["dm_tpl"])
     today = await db.scalar(
@@ -281,7 +281,7 @@ def _validate_terms(terms: list[str]) -> str | None:
         return "Не нашёл ни одного слова. Перечислите их через запятую."
     try:
         compile_rule({"id": 0, "name": "", "trigger": "keywords", "keywords": json.dumps([terms]),
-                      "exclude": "[]", "notify": 0, "forward_to": None, "reply_tpl": None,
+                      "exclude": "[]", "notify": 0, "reply_tpl": None,
                       "dm_tpl": None, "cooldown_h": 0})
     except Exception as e:  # noqa: BLE001 — ошибка в регулярке пользователя
         return f"Ошибка в регулярном выражении: <code>{h(e)}</code>"
@@ -430,15 +430,6 @@ async def in_test(message: Message, state: FSMContext, db: Database):
     verdict = "✅ <b>Сработает</b>" if rule.match(text) else "❌ <b>Не сработает</b>"
     await message.answer(f"{verdict}\n\n<blockquote>{h(cut(text, 500))}</blockquote>",
                          reply_markup=kb([btn("🧪 Ещё раз", f"r:test:{rule.id}"), btn("« К фильтру", f"r:v:{rule.id}")]))
-
-
-@router.callback_query(F.data.startswith("r:fwdx:"))
-async def cb_forward_off(call: CallbackQuery, db: Database, ub: UserBot):
-    rid = rid_of(call)
-    await db.execute("UPDATE rules SET forward_to = NULL WHERE id = ?", (rid,))
-    await ub.monitor.reload()
-    await render_rule(call, db, rid)
-    await call.answer("Пересылка выключена")
 
 
 @router.callback_query(F.data.startswith("r:del:"))

@@ -72,7 +72,6 @@ class CompiledRule:
     exclude: re.Pattern | None = None
     commands: re.Pattern | None = None
     notify: bool = True
-    forward_to: int | None = None
     reply_tpl: int | None = None
     dm_tpl: int | None = None
     cooldown_h: int = 24
@@ -103,7 +102,6 @@ def compile_rule(row) -> CompiledRule:
         exclude=_compile_terms(json.loads(row["exclude"])),
         commands=_compile_commands(json.loads(row["commands"]) if "commands" in row.keys() else []),
         notify=bool(row["notify"]),
-        forward_to=row["forward_to"],
         reply_tpl=row["reply_tpl"],
         dm_tpl=row["dm_tpl"],
         cooldown_h=row["cooldown_h"],

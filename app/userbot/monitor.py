@@ -181,7 +181,7 @@ class Monitor:
                 except Exception:
                     log.exception("Не удалось уведомить о заявке #%s", cur.lastrowid)
 
-        acting = [r for r in fresh if r.forward_to or r.reply_tpl or r.dm_tpl]
+        acting = [r for r in fresh if r.reply_tpl or r.dm_tpl]
         if not acting:
             return
         dm_queued = False
@@ -196,11 +196,6 @@ class Monitor:
             await asyncio.sleep(wait)  # пауза: реакция не мгновенная
         if self.db.get("paused"):
             return
-        if rule.forward_to:
-            try:
-                await self.ub.client.forward_messages(rule.forward_to, msg)
-            except errors.RPCError as e:
-                await self.ub.event(f"⚠️ Фильтр «{escape(rule.name)}»: не удалось переслать заявку — {e.__class__.__name__}")
         if rule.reply_tpl and (tpl := await self.db.template(rule.reply_tpl)):
             try:
                 await self.ub.send_template(msg.chat_id, tpl, reply_to=msg.id)

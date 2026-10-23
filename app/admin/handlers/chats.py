@@ -15,7 +15,6 @@ router = Router(name="chats")
 MODES = {
     "rs": ("🛰 Группы фильтра", "Отметьте группы/каналы, где работает этот фильтр.", False, True, "r:v:{}"),
     "ga": ("➕ Добавить группу", "Выберите группу или канал, куда бот присылает заявки. ✅ — уже отслеживается.", False, False, "g:list:0"),
-    "rf": ("↪️ Куда пересылать заявки", "Выберите чат, куда пересылать подходящие заявки.", True, False, "r:v:{}"),
     "bt": ("🎯 Чаты для рассылки", "Отметьте группы и каналы, куда отправлять рассылку.", True, True, "b:v:{}"),
     "v": ("📋 Мои чаты", "Нажмите на чат, чтобы посмотреть подробности.", False, False, "c:menu"),
 }
@@ -42,9 +41,6 @@ def _where(mode: str, query: str, ftype: str) -> tuple[str, list]:
 async def _selected(db: Database, mode: str, obj: int) -> set[int]:
     if mode == "rs":
         return set(await db.rule_sources(obj))
-    if mode == "rf":
-        r = await db.rule(obj)
-        return {r["forward_to"]} if r and r["forward_to"] else set()
     if mode == "bt":
         return set(await db.broadcast_targets(obj))
     if mode == "ga":
@@ -79,13 +75,11 @@ async def render_picker(event, db: Database, user_id: int, mode: str, obj: int, 
     tools = [btn("🔍 Поиск" if not query else "✖️ Сбросить поиск", f"pq:{mode}:{obj}" if not query else f"pqx:{mode}:{obj}"),
              btn(TYPE_FILTERS[ftype], f"pf:{mode}:{obj}")]
     bulk = [btn("☑️ Выбрать все", f"pall:{mode}:{obj}"), btn("◻️ Снять все", f"pnone:{mode}:{obj}")] if multi else None
-    extra = [btn("🚫 Не пересылать", f"r:fwdx:{obj}")] if mode == "rf" else None
     await show(event, "\n".join(text), kb(
         *buttons,
         pager(f"p:{mode}:{obj}", page, total),
         tools,
         bulk,
-        extra,
         back(back_to.format(obj), "✅ Готово" if multi else "« Назад"),
     ))
 
@@ -111,11 +105,6 @@ async def cb_pick(call: CallbackQuery, db: Database, ub: UserBot):
         await ub.monitor.reload()
         await groups.render_group(call, db, chat_id)
         return await call.answer("Группа добавлена")
-    if mode == "rf":
-        await db.execute("UPDATE rules SET forward_to = ? WHERE id = ?", (chat_id, obj))
-        await ub.monitor.reload()
-        await rules.render_rule(call, db, obj)
-        return await call.answer("Сохранено")
 
     table, col = ("rule_sources", "rule_id") if mode == "rs" else ("broadcast_targets", "broadcast_id")
     exists = await db.scalar(f"SELECT 1 FROM {table} WHERE {col} = ? AND chat_id = ?", (obj, chat_id))

@@ -9,6 +9,8 @@ class Input(StatesGroup):
     rule_cd = State()
     rule_test = State()
     rule_cmd = State()
+    grp_kw = State()
+    grp_cmd = State()
 
     tpl_name = State()
     tpl_content = State()

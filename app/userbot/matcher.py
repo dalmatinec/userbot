@@ -85,11 +85,10 @@ class CompiledRule:
             return False  # срабатывает на вступление, а не на текст
         if self.trigger == "any":
             return True
-        if self.trigger == "commands":
-            return bool(self.commands and self.commands.search(norm))
-        if not self.groups:
-            return False
-        return all(p.search(norm) for p in self.groups)
+        # слова ИЛИ команда: в одном фильтре группы могут быть и то и другое
+        if self.groups and all(p.search(norm) for p in self.groups):
+            return True
+        return bool(self.commands and self.commands.search(norm))
 
 
 def compile_rule(row) -> CompiledRule:

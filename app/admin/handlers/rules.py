@@ -9,6 +9,7 @@ from ...userbot.client import UserBot
 from ...userbot.matcher import compile_rule, split_terms
 from ..states import Input
 from ..ui import PAGE, TRIGGERS, ask, back, btn, cut, day_start, drop_prompt, fmt_delay, grid, h, kb, on_off, pager, show
+from .groups import render_group
 
 router = Router(name="rules")
 
@@ -23,9 +24,9 @@ KW_HELP = (
 
 
 async def render_list(event, db: Database, page: int = 0):
-    total = await db.scalar("SELECT COUNT(*) FROM rules")
+    total = await db.scalar("SELECT COUNT(*) FROM rules WHERE substr(name, 1, 2) <> '__'")
     rows = await db.fetchall(
-        "SELECT id, name, enabled, trigger FROM rules ORDER BY id LIMIT ? OFFSET ?",
+        "SELECT id, name, enabled, trigger FROM rules WHERE substr(name, 1, 2) <> '__' ORDER BY id LIMIT ? OFFSET ?",
         (PAGE, page * PAGE),
     )
     buttons = [[btn(f"{on_off(r['enabled'])} {cut(r['name'], 30)}", f"r:v:{r['id']}")] for r in rows]
@@ -48,6 +49,10 @@ async def render_rule(event, db: Database, rid: int):
     r = await db.rule(rid)
     if not r:
         return await render_list(event, db)
+    if r["name"].startswith("__"):  # служебный фильтр группы — показываем экран группы
+        sources = await db.rule_sources(rid)
+        if sources:
+            return await render_group(event, db, sources[0])
     groups = json.loads(r["keywords"])
     exclude = json.loads(r["exclude"])
     sources = await db.rule_sources(rid)

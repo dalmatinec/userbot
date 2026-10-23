@@ -28,9 +28,11 @@ async def lead_card(db: Database, lead_id: int, *, for_notify: bool = False) -> 
         parts.append(f"<code>{lead['author_id']}</code>")
     author = " ".join(parts) or "не определён"
 
+    rule_name = lead["rule_name"] or ""
+    rule_label = "ключевые слова группы" if rule_name.startswith("__") else (rule_name or "удалено")
     text = (
         f"📥 <b>{'Новая заявка' if for_notify else 'Заявка'} #{lead['id']}</b>\n\n"
-        f"🎯 Фильтр: <b>{h(lead['rule_name'] or 'удалён')}</b>\n"
+        f"🔑 Сработало: <b>{h(rule_label)}</b>\n"
         f"💬 Чат: {h(lead['chat_title'] or lead['chat_id'])}\n"
         f"👤 Автор: {author}\n"
         f"🕒 {fmt_ts(lead['created_at'], db)}\n\n"

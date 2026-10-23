@@ -12,7 +12,6 @@ PAGE = 8
 # Разделы админки. Какие из них стоят в главном меню, а какие в «Ещё» — настраивается.
 SECTIONS: dict[str, tuple[str, str]] = {
     "groups": ("🛰 Группы", "g:list:0"),
-    "rules": ("🎯 Фильтры", "r:list:0"),
     "leads": ("📥 Заявки", "l:list:0"),
     "templates": ("📝 Шаблоны", "t:list:0"),
     "broadcasts": ("📣 Рассылки", "b:list:0"),

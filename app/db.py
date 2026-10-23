@@ -145,7 +145,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "link_preview": False,
     "retention_days": 30,      # сколько дней хранить журналы
     "tz_offset": 3,            # часовой пояс для тихих часов и статистики (UTC+3 — Москва)
-    "main_menu": ["groups", "rules", "leads", "templates", "broadcasts", "chats", "pause"],
+    "main_menu": ["groups", "leads", "templates", "broadcasts", "chats", "pause"],
 }
 
 
@@ -201,6 +201,9 @@ class Database:
             if "groups" not in menu:
                 await self.put("main_menu", ["groups", *menu])
             await self.put("migr_groups", True)
+        if not self.get("migr_no_rules_menu"):
+            await self.put("main_menu", [m for m in self.get("main_menu") if m != "rules"])
+            await self.put("migr_no_rules_menu", True)
 
     async def close(self) -> None:
         if self.conn:

@@ -32,7 +32,7 @@ async def main_text(db: Database, ub: UserBot) -> str:
         "🤖 <b>Панель юзербота</b>\n\n"
         f"👤 Аккаунт: {account}\n"
         f"⚙️ Режим: {mode}\n"
-        f"🛰 Групп: <b>{groups}</b>   🎯 Фильтров: <b>{rules}</b>   📣 Рассылок: <b>{bcs}</b>\n"
+        f"🛰 Групп: <b>{groups}</b>   📣 Рассылок: <b>{bcs}</b>\n"
         f"📥 Заявок сегодня: <b>{leads_today}</b>"
     )
 

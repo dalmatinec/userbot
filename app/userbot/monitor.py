@@ -205,7 +205,7 @@ class Monitor:
             try:
                 await self.ub.send_template(msg.chat_id, tpl, reply_to=msg.id)
             except errors.RPCError as e:
-                await self.ub.event(f"⚠️ Фильтр «{escape(rule.name)}»: не удалось ответить в группе — {e.__class__.__name__}")
+                await self.ub.event(f"⚠️ Не удалось ответить в группе — {e.__class__.__name__}")
         if want_dm:
             self.dm_queue.put_nowait(DmTask(
                 author.id, author.username, rule.dm_tpl, rule.id, rule.cooldown_h, title=author.title,
@@ -248,7 +248,7 @@ class Monitor:
                     try:
                         await self.ub.send_template(chat_id, tpl)
                     except errors.RPCError as e:
-                        await self.ub.event(f"⚠️ Фильтр «{escape(rule.name)}»: не удалось поприветствовать — {e.__class__.__name__}")
+                        await self.ub.event(f"⚠️ Не удалось поприветствовать новичка — {e.__class__.__name__}")
                 if rule.dm_tpl and author.reachable:
                     self.dm_queue.put_nowait(DmTask(
                         author.id, author.username, rule.dm_tpl, rule.id, rule.cooldown_h, title=author.title,

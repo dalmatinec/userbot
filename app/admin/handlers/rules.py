@@ -87,7 +87,6 @@ async def render_rule(event, db: Database, rid: int):
         "",
         "<b>Действия при совпадении:</b>",
         f"🔔 Уведомление в этот бот: {'да' if r['notify'] else 'нет'}",
-        f"↪️ Пересылать в: {h(titles.get(r['forward_to'], r['forward_to'])) if r['forward_to'] else 'нет'}",
         f"💬 Ответ в группе: {h(reply_tpl['name']) if reply_tpl else 'нет'}",
         f"✉️ ЛС автору: {h(dm_tpl['name']) if dm_tpl else 'нет'}"
         + (f" (не чаще 1 раза в {r['cooldown_h']} ч)" if dm_tpl and r["cooldown_h"] else ""),
@@ -102,8 +101,8 @@ async def render_rule(event, db: Database, rid: int):
         [btn("🚫 Минус-слова", f"r:ex:{rid}"), btn("🧪 Проверить текст", f"r:test:{rid}")],
         [btn(f"🛰 Группы ({len(sources)})", f"p:rs:{rid}:0"),
          btn(f"🔔 Уведомления: {'да' if r['notify'] else 'нет'}", f"r:ntf:{rid}")],
-        [btn("↪️ Пересылка", f"p:rf:{rid}:0"), btn("💬 Ответ в группе", f"tp:rr:{rid}:0")],
-        [btn("✉️ ЛС автору", f"tp:rd:{rid}:0"), btn("⏱ Частота ЛС", f"r:cd:{rid}")],
+        [btn("💬 Ответ в группе", f"tp:rr:{rid}:0"), btn("✉️ ЛС автору", f"tp:rd:{rid}:0")],
+        [btn("⏱ Частота ЛС", f"r:cd:{rid}")],
         [btn("⏳ Задержка", f"r:dl:{rid}"), btn("✏️ Название", f"r:ren:{rid}")],
         [btn("🗑 Удалить", f"r:del:{rid}")],
         # фильтр одной группы — возвращаемся в эту группу

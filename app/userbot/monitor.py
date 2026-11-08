@@ -17,6 +17,8 @@ from .matcher import CompiledRule, compile_rule
 
 log = logging.getLogger(__name__)
 
+POLL_SEC = 5  # как часто проверять группы самому — на случай, если Telegram не прислал событие
+
 USERNAME_RE = re.compile(r"(?<![\w@/])@([A-Za-z][A-Za-z0-9_]{3,31})\b")
 TG_USER_RE = re.compile(r"tg://user\?id=(\d+)")
 ID_RE = re.compile(r"(?:\bid|\bид|айди|user_id)\s*[:=#№]?\s*(\d{5,15})\b", re.IGNORECASE)
@@ -71,7 +73,8 @@ class Monitor:
         self.dm_blocked_until = 0
         self._handler_added = False
         self.join_queue: asyncio.Queue = asyncio.Queue()
-        self._join_started = False
+        self._handled: dict[int, set[int]] = {}  # chat_id -> id уже разобранных сообщений
+        self._last_id: dict[int, int] = {}       # chat_id -> последний известный id сообщения
 
     async def setup(self) -> None:
         """Вызывается при каждом (пере)подключении: обработчик вешается один раз, воркер ЛС — заново."""
@@ -81,10 +84,10 @@ class Monitor:
             self.ub.client.add_event_handler(
                 self._on_join, events.ChatAction(func=lambda e: bool(e.user_joined or e.user_added)))
             self._handler_added = True
+        # фоновые задачи отменяются при обрыве связи, поэтому запускаются заново при каждом подключении
         self.ub.spawn(self._dm_worker())
-        if not self._join_started:
-            self._join_started = True
-            self.ub.spawn(self._join_worker())
+        self.ub.spawn(self._join_worker())
+        self.ub.spawn(self._poll_loop())
 
     async def reload(self) -> None:
         """Перечитывает включённые группы и фильтры в память. Вызывается после любых правок в админке."""
@@ -107,13 +110,54 @@ class Monitor:
         log.info("Правил активно: %s, групп-источников: %s", len(compiled), len(by_chat))
 
     async def _on_message(self, event: events.NewMessage.Event) -> None:
-        if event.out:  # свои сообщения аккаунта не трогаем
+        self._handle(event.message)
+
+    def _first_time(self, chat_id: int, msg_id: int) -> bool:
+        """True, если сообщение ещё не разбирали (оно может прийти и событием, и опросом)."""
+        seen = self._handled.setdefault(chat_id, set())
+        if msg_id in seen:
+            return False
+        seen.add(msg_id)
+        if len(seen) > 1000:
+            for old in sorted(seen)[:500]:
+                seen.discard(old)
+        self._last_id[chat_id] = max(self._last_id.get(chat_id, 0), msg_id)
+        return True
+
+    async def _poll_loop(self) -> None:
+        """Сам забирает новые сообщения отслеживаемых групп: Telegram иногда не присылает события."""
+        client = self.ub.client
+        while True:
+            await asyncio.sleep(POLL_SEC)
+            for chat_id in list(self.group_cfg):
+                try:
+                    last = self._last_id.get(chat_id)
+                    if last is None:  # первая проверка группы: запоминаем, откуда начинать, историю не трогаем
+                        latest = await client.get_messages(chat_id, limit=1)
+                        self._last_id[chat_id] = latest[0].id if latest else 0
+                        continue
+                    async for msg in client.iter_messages(chat_id, min_id=last, limit=50, reverse=True):
+                        if msg.id not in self._handled.get(chat_id, ()):
+                            log.info("Группа %s: сообщение %s забрано проверкой (событие от Telegram не пришло)",
+                                     chat_id, msg.id)
+                            self._handle(msg)
+                except errors.FloodWaitError as e:
+                    log.warning("Проверка групп: FloodWait %s с", e.seconds)
+                    await asyncio.sleep(e.seconds)
+                except Exception:
+                    log.exception("Ошибка проверки группы %s", chat_id)
+
+    def _handle(self, msg) -> None:
+        if msg.out:  # свои сообщения аккаунта не трогаем
             return
-        cfg = self.group_cfg.get(event.chat_id)
+        chat_id = msg.chat_id
+        cfg = self.group_cfg.get(chat_id)
         if cfg is None:  # группа не отслеживается или выключена
             return
-        chat_id, sender_id = event.chat_id, event.sender_id
-        text = event.message.message or ""
+        if not self._first_time(chat_id, msg.id):
+            return
+        sender_id = msg.sender_id
+        text = msg.message or ""
         if self.db.get("paused"):
             return _seen(chat_id, sender_id, text, "пропущено: юзербот на паузе")
         rules = [r for r in self.by_chat.get(chat_id, []) if r.trigger != "joined"]
@@ -126,7 +170,7 @@ class Monitor:
         if not matched:
             return _seen(chat_id, sender_id, text, "пропущено: нет ключевых слов или команд из настроек")
         _seen(chat_id, sender_id, text, "✅ заявка принята")
-        self.ub.spawn(self._process(event.message, matched))
+        self.ub.spawn(self._process(msg, matched))
 
     # --- автор заявки ---
 

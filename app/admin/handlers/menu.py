@@ -1,10 +1,11 @@
 from aiogram import F, Router
-from aiogram.filters import Command, CommandStart
+from aiogram.filters import Command, CommandStart, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
 from ...db import Database
 from ...userbot.client import UserBot
+from ..states import Input
 from ..ui import SECTIONS, btn, day_start, grid, h, kb, show
 
 router = Router(name="menu")
@@ -44,8 +45,12 @@ async def render_main(event, db: Database, ub: UserBot):
     await show(event, await main_text(db, ub), kb(*rows))
 
 
-@router.message(CommandStart())
-@router.message(Command("menu"))
+# пока админ вводит список команд, «/start» — это текст для сохранения, а не открытие меню
+NOT_TYPING_COMMANDS = ~StateFilter(Input.grp_cmd, Input.rule_cmd)
+
+
+@router.message(CommandStart(), NOT_TYPING_COMMANDS)
+@router.message(Command("menu"), NOT_TYPING_COMMANDS)
 async def cmd_start(message: Message, state: FSMContext, db: Database, ub: UserBot):
     await state.clear()
     await render_main(message, db, ub)

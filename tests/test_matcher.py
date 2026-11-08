@@ -8,7 +8,7 @@ def rule(trigger="keywords", groups=(), exclude=(), commands=()):
     return compile_rule({
         "id": 1, "name": "t", "trigger": trigger, "commands": json.dumps(list(commands)),
         "keywords": json.dumps([list(g) for g in groups]), "exclude": json.dumps(list(exclude)),
-        "notify": 1, "forward_to": None, "reply_tpl": None, "dm_tpl": None, "cooldown_h": 24,
+        "notify": 1, "reply_tpl": None, "dm_tpl": None, "cooldown_h": 24, "delay_sec": None,
     })
 
 

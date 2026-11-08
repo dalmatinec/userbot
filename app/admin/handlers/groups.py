@@ -12,8 +12,9 @@ from aiogram.types import CallbackQuery, Message
 from ...db import Database, now
 from ...userbot.client import UserBot
 from ...userbot.matcher import split_terms
+from ...userbot.monitor import LAST_SEEN
 from ..states import Input
-from ..ui import CHAT_TYPES, PAGE, ask, back, btn, cut, drop_prompt, fmt_delay, grid, h, kb, on_off, pager, show
+from ..ui import CHAT_TYPES, PAGE, ask, back, btn, cut, drop_prompt, fmt_delay, fmt_ts, grid, h, kb, on_off, pager, show
 
 router = Router(name="groups")
 
@@ -103,7 +104,18 @@ async def render_group(event, db: Database, chat_id: int):
         f"✉️ ЛС автору: {h(dm_tpl['name']) if dm_tpl else 'нет'}",
         f"⏳ Задержка: <b>{fmt_delay(g['delay_sec'])}</b>",
         f"🔔 Уведомления: <b>{'да' if g['notify'] else 'нет'}</b>",
+        "",
     ]
+    if seen := LAST_SEEN.get(chat_id):
+        ts, sender, text, verdict = seen
+        lines += [
+            f"👁 <b>Последнее сообщение</b> ({fmt_ts(ts, db)}) от <code>{sender}</code>:",
+            f"<i>{h(cut(text, 80)) or 'без текста'}</i>",
+            f"→ {h(verdict)}",
+        ]
+    elif g["enabled"]:
+        lines.append("👁 <i>С момента запуска в группе не было сообщений (или аккаунт её не видит).</i>")
+    last_sender = seen[1] if seen else None
     await show(event, "\n".join(lines), kb(
         [btn("🔴 Выключить группу" if g["enabled"] else "🟢 Включить группу", f"g:on:{chat_id}"),
          btn(f"⏳ Задержка: {fmt_delay(g['delay_sec'])}", f"g:dl:{chat_id}")],
@@ -113,6 +125,9 @@ async def render_group(event, db: Database, chat_id: int):
         [btn("💬 Ответ на заявки", f"tp:rr:{kw['id']}:0"), btn("✉️ ЛС автору", f"tp:rd:{kw['id']}:0")],
         [btn("⏱ Частота ЛС", f"r:cd:{kw['id']}"), btn(f"🔔 Уведомления: {'да' if g['notify'] else 'нет'}", f"g:ntf:{chat_id}")],
         [btn("🤖 Бот заявок", f"g:bot:{chat_id}"), btn("🚫 Без бота", f"g:botx:{chat_id}")],
+        [btn(f"🤖 Бот заявок = {last_sender}", f"g:botl:{chat_id}:{last_sender}")]
+        if last_sender and last_sender != g["bot_id"] else None,
+        [btn("🔄 Обновить", f"g:v:{chat_id}")],
         [btn("🗑 Убрать группу", f"g:del:{chat_id}"), btn("« К группам", "g:list:0")],
     ))
 
@@ -274,6 +289,16 @@ async def cb_bot_clear(call: CallbackQuery, db: Database, ub: UserBot):
     await call.answer("Бот снят: реагирую на всех")
 
 
+@router.callback_query(F.data.startswith("g:botl:"))
+async def cb_bot_last(call: CallbackQuery, db: Database, ub: UserBot):
+    """Назначить ботом заявок отправителя последнего сообщения группы."""
+    _, _, chat_id, sender = call.data.split(":")
+    await db.execute("UPDATE groups SET bot_id = ? WHERE chat_id = ?", (int(sender), int(chat_id)))
+    await ub.monitor.reload()
+    await render_group(call, db, int(chat_id))
+    await call.answer("Бот заявок сохранён")
+
+
 @router.message(Input.grp_bot)
 async def in_bot(message: Message, state: FSMContext, db: Database, ub: UserBot):
     data = await state.get_data()
@@ -281,9 +306,11 @@ async def in_bot(message: Message, state: FSMContext, db: Database, ub: UserBot)
     await drop_prompt(message, data.get("prompt"))
     chat_id = data["group"]
     bot_id = None
-    fwd = getattr(message, "forward_from", None)
-    if fwd is not None:
-        bot_id = fwd.id
+    origin = message.forward_origin
+    if origin is not None:
+        # бот (пользователь), чат или канал, от имени которого было сообщение
+        sender = getattr(origin, "sender_user", None) or getattr(origin, "sender_chat", None) or getattr(origin, "chat", None)
+        bot_id = sender.id if sender else None
     elif message.text:
         raw = message.text.strip()
         if raw.lstrip("-").isdigit():

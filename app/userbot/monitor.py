@@ -21,6 +21,14 @@ USERNAME_RE = re.compile(r"(?<![\w@/])@([A-Za-z][A-Za-z0-9_]{3,31})\b")
 TG_USER_RE = re.compile(r"tg://user\?id=(\d+)")
 ID_RE = re.compile(r"(?:\bid|\bид|айди|user_id)\s*[:=#№]?\s*(\d{5,15})\b", re.IGNORECASE)
 
+# последнее сообщение в каждой отслеживаемой группе и что с ним сделали — видно на экране группы
+LAST_SEEN: dict[int, tuple[int, int | None, str, str]] = {}  # chat_id -> (время, отправитель, текст, итог)
+
+
+def _seen(chat_id: int, sender_id: int | None, text: str, verdict: str) -> None:
+    LAST_SEEN[chat_id] = (now(), sender_id, text[:100], verdict)
+    log.info("Группа %s, от %s: %s | %r", chat_id, sender_id, verdict, text[:80])
+
 
 @dataclass
 class Author:
@@ -101,16 +109,24 @@ class Monitor:
     async def _on_message(self, event: events.NewMessage.Event) -> None:
         if event.out:  # свои сообщения аккаунта не трогаем
             return
-        rules = self.by_chat.get(event.chat_id)
-        if not rules or self.db.get("paused"):
+        cfg = self.group_cfg.get(event.chat_id)
+        if cfg is None:  # группа не отслеживается или выключена
             return
-        bot_id = self.group_cfg.get(event.chat_id, (0, True, None))[2]
-        if bot_id and event.sender_id != bot_id:  # в группе задан бот заявок — только его сообщения
-            return
+        chat_id, sender_id = event.chat_id, event.sender_id
         text = event.message.message or ""
+        if self.db.get("paused"):
+            return _seen(chat_id, sender_id, text, "пропущено: юзербот на паузе")
+        rules = [r for r in self.by_chat.get(chat_id, []) if r.trigger != "joined"]
+        if not rules:
+            return _seen(chat_id, sender_id, text, "пропущено: в группе не заданы ключевые слова или команды")
+        bot_id = cfg[2]
+        if bot_id and sender_id != bot_id:  # в группе задан бот заявок — только его сообщения
+            return _seen(chat_id, sender_id, text, f"пропущено: отправитель не бот заявок ({bot_id})")
         matched = [r for r in rules if r.match(text)]
-        if matched:
-            self.ub.spawn(self._process(event.message, matched))
+        if not matched:
+            return _seen(chat_id, sender_id, text, "пропущено: нет ключевых слов или команд из настроек")
+        _seen(chat_id, sender_id, text, "✅ заявка принята")
+        self.ub.spawn(self._process(event.message, matched))
 
     # --- автор заявки ---
 
@@ -193,6 +209,8 @@ class Monitor:
         for rule in acting:
             wait = delay if rule.delay_sec is None else rule.delay_sec  # задержка фильтра важнее группы
             want_dm = bool(rule.dm_tpl) and author.reachable and not dm_queued
+            if rule.dm_tpl and not author.reachable:
+                log.info("Заявка в %s: автор не определён — ЛС отправить некому", msg.chat_id)
             dm_queued = dm_queued or want_dm
             self.ub.spawn(self._act(msg, rule, author, wait, want_dm))
 

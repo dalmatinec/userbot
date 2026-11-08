@@ -194,6 +194,7 @@ class Monitor:
             )
             await self.db.conn.commit()
             if cur.rowcount == 0:
+                log.info("Группа %s: сообщение %s уже обработано", msg.chat_id, msg.id)
                 continue  # эту заявку по этому фильтру уже обработали
             fresh.append(rule)
             if rule.notify and group_notify and self.db.get("notify_leads") and self.ub.on_lead:
@@ -222,7 +223,9 @@ class Monitor:
         if rule.reply_tpl and (tpl := await self.db.template(rule.reply_tpl)):
             try:
                 await self.ub.send_template(msg.chat_id, tpl, reply_to=msg.id)
+                log.info("Группа %s: ответ отправлен", msg.chat_id)
             except errors.RPCError as e:
+                log.info("Группа %s: ответ не отправлен — %s", msg.chat_id, e.__class__.__name__)
                 await self.ub.event(f"⚠️ Не удалось ответить в группе — {e.__class__.__name__}")
         if want_dm:
             self.dm_queue.put_nowait(DmTask(
@@ -306,12 +309,15 @@ class Monitor:
 
     async def _send_dm(self, task: DmTask) -> bool:
         if not task.manual and (self.db.get("paused") or now() < self.dm_blocked_until):
+            log.info("ЛС %s: пропущено — пауза или ограничение Telegram", task.title)
             return False
         tpl = await self.db.template(task.tpl_id)
         if not tpl:
+            log.info("ЛС %s: пропущено — шаблон удалён", task.title)
             return False
         peer = await self._resolve_user(task.user_id, task.username)
         if peer is None:
+            log.info("ЛС %s: не удалось найти пользователя", task.title)
             if task.manual:
                 await self.ub.event(f"⚠️ Не удалось найти пользователя {escape(task.title)} — Telegram не даёт написать по ID без контакта.")
             return False
@@ -320,6 +326,8 @@ class Monitor:
         if not task.manual and task.cooldown_h > 0:
             last = await self.db.scalar("SELECT sent_at FROM dm_log WHERE user_id = ?", (user_id,))
             if last and last > now() - task.cooldown_h * 3600:
+                log.info("ЛС %s: пропущено — уже писали %s мин назад (не чаще раза в %s ч)",
+                         task.title, (now() - last) // 60, task.cooldown_h)
                 return False
 
         for attempt in range(2):
@@ -339,6 +347,7 @@ class Monitor:
                 )
                 return False
             except errors.RPCError as e:
+                log.info("ЛС %s: ошибка Telegram %s", task.title, e.__class__.__name__)
                 if task.manual:
                     await self.ub.event(f"⚠️ Не удалось написать {escape(task.title)}: {e.__class__.__name__}")
                 return False
@@ -348,6 +357,7 @@ class Monitor:
             "ON CONFLICT(user_id) DO UPDATE SET rule_id = excluded.rule_id, sent_at = excluded.sent_at",
             (user_id, task.rule_id, now()),
         )
+        log.info("ЛС %s: отправлено", task.title)
         if task.manual:
             await self.ub.event(f"✉️ Сообщение отправлено: {escape(task.title)}")
         return True

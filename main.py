@@ -1,72 +1,83 @@
-"""Точка входа: юзербот (Telethon) и бот-админка (aiogram) в одном процессе."""
+"""Юзербот-кубик: команда .dice [N] бросает 🎲, пока не выпадет MIN_VALUE или больше.
+
+Неудачные броски сразу удаляются у всех. Работает только на ваших собственных
+сообщениях (outgoing), в любом чате.
+"""
 import asyncio
-import contextlib
 import logging
+import os
+from pathlib import Path
 
-from app.admin.access import Access
-from app.admin.bot import Notifier, build_bot, set_commands
-from app.config import load_config
-from app.db import Database
-from app.userbot.client import FATAL_ERRORS, UserBot
+from dotenv import load_dotenv
+from telethon import TelegramClient, events, errors
+from telethon.sessions import StringSession
+from telethon.tl.types import InputMediaDice
 
-log = logging.getLogger("main")
+load_dotenv()
+
+API_ID = int(os.environ["API_ID"])
+API_HASH = os.environ["API_HASH"]
+SESSION = os.getenv("SESSION", "userbot").strip() or "userbot"
+DATA_DIR = Path(os.getenv("DATA_DIR", "data")).resolve()
+MIN_VALUE = int(os.getenv("DICE_MIN", "5"))      # 5 → выпадает только 5 или 6
+MAX_ROLLS = int(os.getenv("DICE_MAX_ROLLS", "10"))  # защита от .dice 1000
+
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO").upper(),
+    format="%(asctime)s %(levelname)-7s %(name)s: %(message)s",
+)
+logging.getLogger("telethon").setLevel(logging.WARNING)
+log = logging.getLogger("dice")
 
 
-async def run_userbot(ub: UserBot, notifier: Notifier) -> None:
-    delay = 10
+def make_session():
+    if len(SESSION) > 100:  # строковая сессия из .env
+        return StringSession(SESSION)
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    return str(DATA_DIR / SESSION)
+
+
+client = TelegramClient(
+    make_session(), API_ID, API_HASH,
+    device_model="Admin Userbot", system_version="1.0", app_version="1.0",
+    flood_sleep_threshold=60,
+)
+
+
+async def lucky_roll(chat_id: int) -> int:
     while True:
+        msg = await client.send_message(chat_id, file=InputMediaDice("🎲"))
+        value = msg.media.value
+        if value >= MIN_VALUE:
+            return value
+        await msg.delete()          # неудачный бросок удаляем у всех
+        await asyncio.sleep(1)      # пауза от флуд-лимита
+
+
+@client.on(events.NewMessage(outgoing=True, pattern=r"^\.dice(?:\s+(\d+))?$"))
+async def on_dice(event):
+    count = max(1, min(int(event.pattern_match.group(1) or 1), MAX_ROLLS))
+    await event.delete()  # убираем саму команду
+    values = []
+    for i in range(count):
         try:
-            await ub.run()
-        except RuntimeError as e:  # сессия не авторизована — ждать бессмысленно
-            log.error("%s", e)
+            values.append(await lucky_roll(event.chat_id))
+        except errors.RPCError as e:
+            log.warning("Не удалось бросить кубик: %r", e)
             return
-        except FATAL_ERRORS as e:
-            log.error("Сессия юзербота недействительна: %r", e)
-            await notifier.event(
-                f"⛔️ Сессия юзербота недействительна (<code>{e.__class__.__name__}</code>).\n"
-                "Создайте новую: <code>python login.py</code>, затем перезапустите сервис."
-            )
-            return
-        except Exception as e:
-            log.exception("Юзербот упал")
-            await notifier.event(f"⚠️ Юзербот отключился: <code>{e.__class__.__name__}</code>. Переподключаюсь…")
-        if ub.stopping:
-            return
-        await asyncio.sleep(delay)
-        delay = min(delay * 2, 300)
+        if i < count - 1:
+            await asyncio.sleep(1)
+    log.info("Чат %s: %s (сумма %s)", event.chat_id, values, sum(values))
 
 
-async def main() -> None:
-    cfg = load_config()
-    logging.basicConfig(
-        level=cfg.log_level,
-        format="%(asctime)s %(levelname)-7s %(name)s: %(message)s",
-    )
-    logging.getLogger("telethon").setLevel(logging.WARNING)
-    logging.getLogger("aiogram.event").setLevel(logging.WARNING)
-
-    db = Database(cfg.db_path)
-    await db.connect()
-    access = Access(cfg.admin_ids, await db.admin_ids())
-    ub = UserBot(cfg, db)
-    bot, dp = build_bot(cfg, db, ub, access)
-    notifier = Notifier(bot, access, db)
-    ub.on_event = notifier.event
-    ub.on_lead = notifier.lead
-
-    await set_commands(bot)
-    ub_task = asyncio.create_task(run_userbot(ub, notifier))
-    try:
-        await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
-    finally:
-        await ub.stop()
-        ub_task.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await ub_task
-        await db.close()
-        await bot.session.close()
+async def main():
+    await client.connect()
+    if not await client.is_user_authorized():
+        raise SystemExit("Сессия не авторизована — запустите: python login.py")
+    me = await client.get_me()
+    log.info("Юзербот запущен: %s (id %s). Команда: .dice или .dice 3", me.first_name, me.id)
+    await client.run_until_disconnected()
 
 
 if __name__ == "__main__":
-    with contextlib.suppress(KeyboardInterrupt):
-        asyncio.run(main())
+    asyncio.run(main())

@@ -178,8 +178,9 @@ input[type=range]::-moz-range-thumb{width:14px;height:14px;border:0;border-radiu
 /* Финал */
 .final{min-height:70vh;justify-content:center}
 .final-q{font-size:clamp(38px,8vw,66px)}
-.qbtns{display:flex;gap:18px;justify-content:center;align-items:center;min-height:100px;width:100%;position:relative}
-#yes,#no{transition:transform .5s cubic-bezier(.2,.8,.2,1),box-shadow .4s}
+.qbtns{display:flex;gap:18px;justify-content:center;align-items:center;min-height:170px;width:100%;max-width:520px;position:relative}
+#yes{transition:box-shadow .4s}
+#no{transition:transform .25s cubic-bezier(.2,.8,.2,1)}
 
 /* Клик-эффекты */
 .ring{position:fixed;width:12px;height:12px;margin:-6px 0 0 -6px;border:1px solid var(--gold);border-radius:50%;pointer-events:none;z-index:21;animation:ring 1s ease-out forwards}

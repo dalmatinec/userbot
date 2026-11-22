@@ -388,21 +388,31 @@
   const no = $("no"), qb = $("qbtns"), yes = $("yes");
   const NO_MSG = ["не получится", "попробуй ещё", "эта кнопка не работает", "точно?", "лучше «Да»", "я подожду"];
   let dodges = 0;
+  // «Нет» отпрыгивает внутри блока, всегда видна и никогда не заезжает на «Да»
+  let nx = 0, ny = 0, lastDodge = 0;
   const dodge = (e) => {
     if (e) e.preventDefault();
+    const now = performance.now(); if (now - lastDodge < 200) return; lastDodge = now;
     dodges++;
-    const r = qb.getBoundingClientRect(), maxX = Math.min(r.width / 2 - 60, 200);
-    no.style.transform = `translate(${rand(-1, 1) * maxX}px,${rand(-1, 1) * 40}px) scale(${Math.max(0.5, 1 - dodges * 0.07)})`;
-    no.style.opacity = Math.max(0.25, 1 - dodges * 0.1);
-    yes.style.transform = `scale(${Math.min(1.6, 1 + dodges * 0.07)})`;
-    yes.style.boxShadow = `0 0 ${20 + dodges * 8}px rgba(230,192,138,.6)`;
+    const box = qb.getBoundingClientRect(), yr = yes.getBoundingClientRect();
+    const w = no.offsetWidth, h = no.offsetHeight, gap = 14;
+    const baseL = box.left + no.offsetLeft, baseT = box.top + no.offsetTop;
+    const nr = { left: baseL + nx, top: baseT + ny };
+    for (let i = 0; i < 40; i++) {
+      const L = rand(box.left, box.right - w), T = rand(box.top, box.bottom - h);
+      const hitsYes = L < yr.right + gap && L + w > yr.left - gap && T < yr.bottom + gap && T + h > yr.top - gap;
+      const tooClose = Math.hypot(L - nr.left, T - nr.top) < w * 0.8;
+      if (!hitsYes && !tooClose) { nx = L - baseL; ny = T - baseT; break; }
+    }
+    no.style.transform = `translate(${nx}px,${ny}px)`;
+    yes.style.boxShadow = `0 0 ${Math.min(36, 14 + dodges * 3)}px rgba(230,192,138,.55)`;
     $("finalA").textContent = NO_MSG[dodges % NO_MSG.length];
   };
   no.addEventListener("pointerenter", dodge);
   no.addEventListener("pointerdown", dodge);
   no.addEventListener("click", dodge);
   yes.addEventListener("click", (e) => {
-    $("finalA").textContent = C.finalAnswer; no.hidden = true; yes.style.transform = "";
+    $("finalA").textContent = C.finalAnswer; no.hidden = true;
     bloom(e.clientX, e.clientY, 50); petalRain(260);
     whisper(e.clientX, e.clientY - 60, "навсегда");
   });

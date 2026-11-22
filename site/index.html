@@ -5,94 +5,88 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Карамелька</title>
 <meta name="robots" content="noindex, nofollow">
-<meta name="theme-color" content="#f6f2ff">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍬</text></svg>">
+<meta name="theme-color" content="#140b12">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90' fill='%23e8a0b4'>♥</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rubik+Mono+One&family=Rubik:wght@400;600;800&family=Caveat:wght@600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400;1,600&family=Manrope:wght@300;400;600&family=Marck+Script&display=swap">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
+<canvas id="sky" aria-hidden="true"></canvas>
 
 <!-- Вход -->
 <div class="gate" id="gate">
-  <form class="gate-box" id="gateForm" autocomplete="off">
-    <span class="tape t-pink"></span>
-    <div class="label">секретная страница</div>
-    <h1 class="gate-title">Стоп! ✋</h1>
-    <p class="gate-q" id="gateQ"></p>
-    <input id="gateInput" type="text" placeholder="пиши сюда…" aria-label="Ответ" autocapitalize="off" spellcheck="false">
-    <p class="hand" id="gateMsg"></p>
-    <button class="btn" type="submit">Войти →</button>
-  </form>
+  <p class="gate-small">для одной девушки</p>
+  <button class="heart-btn" id="heartBtn" type="button" aria-label="Удерживай сердце">
+    <svg viewBox="0 0 100 92" aria-hidden="true">
+      <defs><clipPath id="hc"><path d="M50 88C20 66 2 50 2 28 2 13 14 2 28 2c9 0 17 5 22 12C55 7 63 2 72 2c14 0 26 11 26 26 0 22-18 38-48 60z"/></clipPath></defs>
+      <path class="h-outline" d="M50 88C20 66 2 50 2 28 2 13 14 2 28 2c9 0 17 5 22 12C55 7 63 2 72 2c14 0 26 11 26 26 0 22-18 38-48 60z"/>
+      <rect id="heartFill" clip-path="url(#hc)" x="0" y="92" width="100" height="92"/>
+    </svg>
+  </button>
+  <p class="gate-text" id="gateText"></p>
 </div>
 
 <main class="wrap" id="site" hidden>
 
-  <!-- 1. Привет -->
-  <section class="sheet hero" id="hero">
-    <span class="tape t-lemon"></span>
-    <div class="label">выпуск №1 · только для тебя</div>
+  <section class="hero sec">
+    <p class="kicker">написано для тебя</p>
     <h1 class="title" id="title" aria-label="Карамелька"></h1>
-    <p class="lead">Этот сайт существует в одном экземпляре. Его сделали для тебя.<br><span class="hand big">тыкай везде, тут всё живое →</span></p>
-    <div class="stickers" id="stickers" aria-hidden="true">
-      <span class="sticker" style="left:4%;top:10%;--r:-14deg">🍬</span>
-      <span class="sticker" style="right:5%;top:8%;--r:12deg">💌</span>
-      <span class="sticker" style="left:7%;bottom:10%;--r:8deg">🎧</span>
-      <span class="sticker" style="right:8%;bottom:12%;--r:-10deg">✈️</span>
-      <span class="sticker word" style="right:20%;top:2%;--r:6deg">муа!</span>
-    </div>
-    <p class="drag-hint hand">стикеры можно двигать</p>
+    <p class="script lead">Этот сайт существует в одном экземпляре. Как и ты.</p>
+    <a class="scroll" href="#meet" aria-label="Листать вниз"><span></span></a>
   </section>
 
-  <!-- 2. До встречи -->
-  <section class="sheet" id="meet">
-    <span class="tape t-mint"></span>
-    <div class="head"><h2><mark id="meetTitle">До нашей встречи</mark></h2><span class="label">глава 2</span></div>
-    <div class="countdown" id="countdown">
-      <div class="unit"><div class="digits" id="uD">0</div><small>дней</small></div>
-      <div class="unit"><div class="digits" id="uH">00</div><small>часов</small></div>
-      <div class="unit"><div class="digits" id="uM">00</div><small>минут</small></div>
-      <div class="unit"><div class="digits" id="uS">00</div><small>секунд</small></div>
+  <section class="sec" id="meet">
+    <p class="kicker">i · ожидание</p>
+    <h2 id="meetTitle">До нашей встречи</h2>
+    <div class="countdown">
+      <div class="unit"><b id="uD">0</b><small>дней</small></div>
+      <i class="sep">·</i>
+      <div class="unit"><b id="uH">00</b><small>часов</small></div>
+      <i class="sep">·</i>
+      <div class="unit"><b id="uM">00</b><small>минут</small></div>
+      <i class="sep">·</i>
+      <div class="unit"><b id="uS">00</b><small>секунд</small></div>
     </div>
-    <p class="hand big" id="talking"></p>
+    <p class="script big" id="talking"></p>
   </section>
 
-  <!-- 3. Между нами -->
-  <section class="sheet" id="distance">
-    <span class="tape t-sky"></span>
-    <div class="head"><h2><mark>Между нами</mark></h2><span class="label">глава 3</span></div>
+  <section class="sec" id="distance">
+    <p class="kicker">ii · между нами</p>
+    <h2><span id="km">0</span> километров</h2>
     <div class="route" id="route">
-      <div class="pin-me"><span class="ava">🧑</span><b id="cityMe"></b></div>
+      <div class="pt pt-me"><span class="dot"></span><b>я</b></div>
       <svg class="path" viewBox="0 0 400 120" preserveAspectRatio="none" aria-hidden="true">
-        <path id="arc" d="M10 100 Q200 -20 390 100" fill="none" stroke="currentColor" stroke-width="3" stroke-dasharray="2 10" stroke-linecap="round"/>
+        <path d="M10 100 Q200 -20 390 100" fill="none" stroke="currentColor" stroke-width="1.2" stroke-dasharray="1 7" stroke-linecap="round"/>
       </svg>
-      <div class="km"><span id="km">0</span> км</div>
-      <div class="pin-her"><span class="ava">👧</span><b id="cityHer"></b></div>
+      <div class="city" id="city"></div>
+      <div class="pt pt-her"><span class="dot"></span><b>ты</b></div>
     </div>
+    <p class="note" id="distanceNote"></p>
     <div class="row">
-      <button class="btn" id="kissBtn" type="button">Отправить поцелуй 💋</button>
-      <span class="hand big">доставлено: <b id="kissCount">0</b></span>
+      <button class="btn" id="kissBtn" type="button">Отправить поцелуй</button>
+      <span class="muted">доставлено: <b id="kissCount">0</b></span>
     </div>
   </section>
 
-  <!-- 4. Песни -->
-  <section class="sheet" id="songs">
-    <span class="tape t-pink"></span>
-    <div class="head"><h2><mark>Наши песни</mark></h2><span class="label">глава 4</span></div>
+  <section class="sec" id="songs">
+    <p class="kicker">iii · наши песни</p>
+    <h2>То, что звучит про нас</h2>
     <div class="player">
-      <div class="cassette" id="cassette">
-        <div class="cas-label"><span id="nowTitle">выбери песню</span></div>
-        <div class="cas-window"><i class="reel"></i><i class="tape-band"></i><i class="reel"></i></div>
-        <canvas class="viz" id="viz"></canvas>
+      <div class="vinyl-wrap" id="cassette">
+        <div class="vinyl"><div class="vinyl-label">К</div></div>
+        <div class="arm"></div>
       </div>
       <div class="player-side">
-        <p class="hand big now-why" id="nowWhy">тут будет подпись к песне</p>
+        <div class="now-title" id="nowTitle">Выбери песню</div>
+        <p class="script now-why" id="nowWhy"></p>
+        <canvas class="viz" id="viz"></canvas>
         <input type="range" id="seek" min="0" max="1000" value="0" aria-label="Перемотка">
         <div class="times"><span id="tCur">0:00</span><span id="tDur">0:00</span></div>
         <div class="controls">
-          <button class="btn sq" id="prev" type="button" aria-label="Предыдущая">⏮</button>
-          <button class="btn sq big" id="play" type="button" aria-label="Играть">▶</button>
-          <button class="btn sq" id="next" type="button" aria-label="Следующая">⏭</button>
+          <button class="ctl" id="prev" type="button" aria-label="Предыдущая">‹‹</button>
+          <button class="ctl main" id="play" type="button" aria-label="Играть">▶</button>
+          <button class="ctl" id="next" type="button" aria-label="Следующая">››</button>
         </div>
       </div>
     </div>
@@ -100,46 +94,40 @@
     <audio id="audio" preload="metadata"></audio>
   </section>
 
-  <!-- 5. Почему ты -->
-  <section class="sheet" id="why">
-    <span class="tape t-lemon"></span>
-    <div class="head"><h2><mark>Почему именно ты</mark></h2><span class="label">глава 5</span></div>
-    <p class="hand big">переворачивай стикеры</p>
+  <section class="sec" id="why">
+    <p class="kicker">iv · почему именно ты</p>
+    <h2>Восемь причин из тысячи</h2>
     <div class="reasons" id="reasons"></div>
   </section>
 
-  <!-- 6. Письма -->
-  <section class="sheet" id="letters">
-    <span class="tape t-mint"></span>
-    <div class="head"><h2><mark>Открой, когда…</mark></h2><span class="label">глава 6</span></div>
+  <section class="sec" id="letters">
+    <p class="kicker">v · письма</p>
+    <h2>Открой, когда…</h2>
     <div class="envs" id="envs"></div>
     <div class="letter" id="letter" hidden><b id="letterHead"></b><p id="letterText"></p></div>
   </section>
 
-  <!-- 7. Игра -->
-  <section class="sheet" id="gameSec">
-    <span class="tape t-sky"></span>
-    <div class="head"><h2><mark>Поймай карамельки</mark></h2><span class="label">глава 7</span></div>
+  <section class="sec" id="gameSec">
+    <p class="kicker">vi · игра</p>
+    <h2>Поймай звёзды</h2>
     <div class="game" id="game">
       <div class="score" id="score"></div>
-      <div class="game-start" id="gameStart"><button class="btn" id="gameBtn" type="button">Играть</button><p class="hand big">лови сладкое, 💔 не трогай</p></div>
+      <div class="game-start" id="gameStart"><button class="btn" id="gameBtn" type="button">Начать</button><p class="muted">лови звёзды и сердца, тучи не трогай</p></div>
     </div>
     <div class="prize" id="prize" hidden></div>
   </section>
 
-  <!-- 8. Финал -->
-  <section class="sheet final" id="final">
-    <span class="tape t-pink"></span>
-    <div class="label">последняя страница</div>
+  <section class="sec final" id="final">
+    <p class="kicker">vii · последняя страница</p>
     <h2 class="final-q" id="finalQ"></h2>
     <div class="qbtns" id="qbtns">
-      <button class="btn" id="yes" type="button">Да 💗</button>
+      <button class="btn" id="yes" type="button">Да</button>
       <button class="btn ghost" id="no" type="button">Нет</button>
     </div>
-    <p class="hand big" id="finalA"></p>
+    <p class="script big" id="finalA"></p>
   </section>
 
-  <footer class="hand">сделано с любовью · для Карамельки</footer>
+  <footer class="script">с любовью · для Карамельки</footer>
 </main>
 
 <canvas id="fx" aria-hidden="true"></canvas>

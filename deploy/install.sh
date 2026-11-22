@@ -35,7 +35,6 @@ write_nginx() {  # $1 = cert, $2 = key (пусто — только http)
 server {
     listen 443 ssl default_server;
     listen [::]:443 ssl default_server;
-    http2 on;
     server_name _;
     ssl_certificate     $1;
     ssl_certificate_key $2;

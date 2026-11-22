@@ -13,9 +13,12 @@ ACME=/var/www/acme
 
 [ "$(id -u)" = 0 ] || { echo "Запусти от root (sudo -i)"; exit 1; }
 
+CERT_ONLY=0
+if [ "${1:-}" = "--cert-only" ]; then CERT_ONLY=1; shift; fi
 IP="${1:-$(curl -4fsS https://api.ipify.org || curl -4fsS https://ifconfig.me)}"
 echo "==> IP сервера: $IP"
 
+if [ "$CERT_ONLY" = 0 ]; then
 echo "==> Ставлю nginx, git, python"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
@@ -23,6 +26,7 @@ apt-get install -y -qq nginx git python3-venv curl >/dev/null
 
 echo "==> Забираю сайт из GitHub"
 if [ -d "$DIR/.git" ]; then git -C "$DIR" pull -q --ff-only; else git clone -q -b "$BRANCH" "$REPO" "$DIR"; fi
+fi
 mkdir -p "$ACME"
 
 write_nginx() {  # $1 = cert, $2 = key (пусто — только http)
@@ -74,9 +78,17 @@ EOF
   nginx -t -q && systemctl reload nginx
 }
 
-echo "==> Настраиваю nginx (http)"
-systemctl enable -q --now nginx
-write_nginx
+LE_CERT=/etc/letsencrypt/live/karamelka/fullchain.pem
+LE_KEY=/etc/letsencrypt/live/karamelka/privkey.pem
+SELF_DIR=/etc/karamelka
+
+if [ "$CERT_ONLY" = 0 ]; then
+  echo "==> Настраиваю nginx (http)"
+  systemctl enable -q --now nginx
+  if [ -f "$LE_CERT" ]; then write_nginx "$LE_CERT" "$LE_KEY"
+  elif [ -f "$SELF_DIR/cert.pem" ]; then write_nginx "$SELF_DIR/cert.pem" "$SELF_DIR/key.pem"
+  else write_nginx; fi
+fi
 
 if [ -n "${CERT:-}" ] && [ -n "${KEY:-}" ]; then
   echo "==> Использую готовый сертификат: $CERT"
@@ -88,28 +100,51 @@ else
     /opt/certbot/bin/pip install -q --upgrade pip
     /opt/certbot/bin/pip install -q "certbot>=5.10"
   fi
-  /opt/certbot/bin/certbot certonly --webroot -w "$ACME" \
-    --ip-address "$IP" --preferred-profile shortlived \
-    --cert-name karamelka --agree-tos --register-unsafely-without-email \
-    --non-interactive --keep-until-expiring \
-    --deploy-hook "systemctl reload nginx"
-  write_nginx /etc/letsencrypt/live/karamelka/fullchain.pem /etc/letsencrypt/live/karamelka/privkey.pem
+  ok=0
+  for try in 1 2 3 4 5; do
+    if /opt/certbot/bin/certbot certonly --webroot -w "$ACME" \
+        --ip-address "$IP" --preferred-profile shortlived \
+        --cert-name karamelka --agree-tos --register-unsafely-without-email \
+        --non-interactive --keep-until-expiring -q \
+        --deploy-hook "systemctl reload nginx"; then ok=1; break; fi
+    echo "    попытка $try не удалась (сеть), пробую ещё раз через 20 с…"
+    sleep 20
+  done
 
-  # IP-сертификаты живут ~6 дней — продлеваем автоматически каждые 12 часов
-  cat > /etc/systemd/system/karamelka-cert.service <<'EOF'
+  if [ "$ok" = 1 ]; then
+    echo "==> Настоящий сертификат получен"
+    write_nginx "$LE_CERT" "$LE_KEY"
+  elif [ -f "$LE_CERT" ]; then
+    echo "==> Продлить пока не вышло, работает прежний сертификат"
+    write_nginx "$LE_CERT" "$LE_KEY"
+  else
+    echo "==> Let's Encrypt пока не достучался до сервера. Ставлю временный сертификат,"
+    echo "    сервер сам будет пробовать получить настоящий каждые 6 часов."
+    mkdir -p "$SELF_DIR"
+    if [ ! -f "$SELF_DIR/cert.pem" ]; then
+      openssl req -x509 -newkey rsa:2048 -nodes -days 365 -subj "/CN=$IP" \
+        -addext "subjectAltName=IP:$IP" -keyout "$SELF_DIR/key.pem" -out "$SELF_DIR/cert.pem" 2>/dev/null
+    fi
+    write_nginx "$SELF_DIR/cert.pem" "$SELF_DIR/key.pem"
+  fi
+
+  if [ "$CERT_ONLY" = 1 ]; then exit 0; fi
+
+  # IP-сертификаты живут ~6 дней: каждые 6 часов продлеваем или пробуем получить заново
+  cat > /etc/systemd/system/karamelka-cert.service <<EOF
 [Unit]
-Description=Продление сертификата Карамельки
+Description=Сертификат Карамельки
 [Service]
 Type=oneshot
-ExecStart=/opt/certbot/bin/certbot renew -q
+ExecStart=/bin/bash $DIR/deploy/install.sh --cert-only $IP
 EOF
   cat > /etc/systemd/system/karamelka-cert.timer <<'EOF'
 [Unit]
-Description=Продление сертификата Карамельки каждые 12 часов
+Description=Сертификат Карамельки каждые 6 часов
 [Timer]
 OnBootSec=5min
-OnUnitActiveSec=12h
-RandomizedDelaySec=30min
+OnUnitActiveSec=6h
+RandomizedDelaySec=10min
 Persistent=true
 [Install]
 WantedBy=timers.target

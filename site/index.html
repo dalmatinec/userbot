@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Карамелька</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💗</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;800&family=Nunito:wght@400;600;800&family=Caveat:wght@500;700&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- Вход -->
+<div class="gate" id="gate">
+  <form class="gate-box" id="gateForm" autocomplete="off">
+    <div class="eyebrow">только для одной девочки</div>
+    <h1 class="gate-title">Привет 💗</h1>
+    <p class="note" id="hint"></p>
+    <div class="pin" id="pin"></div>
+    <input id="pinInput" inputmode="numeric" maxlength="8" aria-label="Пароль">
+    <p class="gate-err" id="gateErr" hidden>Не то. Подумай ещё 🙂</p>
+    <button class="btn" type="submit">Открыть</button>
+  </form>
+</div>
+
+<main class="wrap" id="site" hidden>
+
+  <section class="chapter hero">
+    <div class="eyebrow">глава 1 · привет</div>
+    <div class="title">Карамелька</div>
+    <p>Этот сайт существует в одном экземпляре. Его сделали для тебя, и листать его можно сколько хочешь.</p>
+    <a class="btn" href="#together">Начать ↓</a>
+  </section>
+
+  <section class="chapter" id="together">
+    <div class="chapter-head"><h2>Мы вместе уже</h2><span class="eyebrow">глава 2</span></div>
+    <div class="counter">
+      <div class="cell"><b id="cD">0</b><small>дней</small></div>
+      <div class="cell"><b id="cH">00</b><small>часов</small></div>
+      <div class="cell"><b id="cM">00</b><small>минут</small></div>
+      <div class="cell"><b id="cS">00</b><small>секунд</small></div>
+    </div>
+  </section>
+
+  <section class="chapter" id="songs">
+    <div class="chapter-head"><h2>Наши песни</h2><span class="eyebrow">глава 3</span></div>
+    <div class="player">
+      <div class="vinyl" id="vinyl"><span>К</span></div>
+      <div class="player-side">
+        <div class="now"><div class="now-title" id="nowTitle">Выбери песню</div><div class="note" id="nowWhy"></div></div>
+        <input type="range" id="seek" min="0" max="1000" value="0" aria-label="Перемотка">
+        <div class="times"><span id="tCur">0:00</span><span id="tDur">0:00</span></div>
+        <div class="controls">
+          <button class="btn ghost round" id="prev" type="button" aria-label="Предыдущая">⏮</button>
+          <button class="btn round big" id="play" type="button" aria-label="Играть">▶</button>
+          <button class="btn ghost round" id="next" type="button" aria-label="Следующая">⏭</button>
+        </div>
+      </div>
+    </div>
+    <ul class="tracks" id="tracks"></ul>
+    <audio id="audio" preload="metadata"></audio>
+  </section>
+
+  <section class="chapter">
+    <div class="chapter-head"><h2>Почему именно ты</h2><span class="eyebrow">глава 4</span></div>
+    <p class="note">нажимай на конфетки</p>
+    <div class="reasons" id="reasons"></div>
+  </section>
+
+  <section class="chapter">
+    <div class="chapter-head"><h2>Открой, когда…</h2><span class="eyebrow">глава 5</span></div>
+    <div class="envs" id="envs"></div>
+    <div class="letter" id="letter" hidden></div>
+  </section>
+
+  <section class="chapter">
+    <div class="chapter-head"><h2>Поймай карамельки</h2><span class="eyebrow">глава 6</span></div>
+    <div class="game" id="game">
+      <div class="score" id="score"></div>
+      <div class="game-start" id="gameStart"><button class="btn" id="gameBtn" type="button">Играть</button><p>Лови сладкое, сердечки разбитые 💔 не трогай</p></div>
+    </div>
+    <div class="prize" id="prize" hidden></div>
+  </section>
+
+  <section class="chapter final">
+    <div class="eyebrow">глава 7 · финал</div>
+    <h2 id="finalQ"></h2>
+    <div class="qbtns" id="qbtns">
+      <button class="btn" id="yes" type="button">Да 💗</button>
+      <button class="btn ghost" id="no" type="button">Нет</button>
+    </div>
+    <p class="note" id="finalA"></p>
+  </section>
+
+</main>
+<canvas id="fx" aria-hidden="true"></canvas>
+
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

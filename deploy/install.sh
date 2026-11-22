@@ -64,7 +64,7 @@ server {
     listen 80 default_server;
     listen [::]:80 default_server;
     server_name _;
-    location /.well-known/acme-challenge/ { root $ACME; }
+    location ^~ /.well-known/acme-challenge/ { root $ACME; default_type text/plain; }
     $http_body
 }
 $ssl
